@@ -66,7 +66,11 @@ func _make_wall_material() -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	if ResourceLoader.exists(asset):
 		m.albedo_texture = load(asset)
-		# 64 texels for 1 metre of wall face, same relationship as the floor.
+		# 64 texels for 1 metre of wall face, the same relationship as the floor, so the density
+		# in style_spec.md §1 holds on the walls too. It was briefly halved to make the masonry
+		# quieter and that was a mistake: it also doubled the apparent size of every block, and
+		# the coursing stopped matching the floor. If the walls read as too busy, the fix belongs
+		# in the texture, not in the scale.
 		m.uv1_scale = Vector3(1.0, WALL_HEIGHT, 1.0)
 	else:
 		m.albedo_texture = _procedural_wall()

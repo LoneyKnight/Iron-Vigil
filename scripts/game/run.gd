@@ -22,6 +22,13 @@ const Util := preload("res://scripts/game/prop_util.gd")
 # --- camera: solved from the style spec, verified by tests/shot.gd ---------------------
 const PPM := 85.0                     # screen px per metre of ground at the focus plane
 const VIEWPORT := Vector2(1920, 1080)
+## Solved by sweeping pitch against the measured room coverage now that real art is in the
+## scene (tools/art/sweep.py, tools/design/concepts/camera_sweep.png). At 85 px/m and a 7 m room:
+##   pitch 28 -> knight 135 px, wall 345 px, but a 7 m room does not fill the frame and the view
+##               reads as a corridor looking through walls
+##   pitch 34 -> knight 127 px, wall 324 px, room and both flanking doorways in frame  <- this
+##   pitch 40 -> knight 117 px, wall 299 px, flatter, the depth starts to go
+##   pitch 46 -> knight 107 px, wall 272 px, back to a floor plan
 const CAM_PITCH_DEG := -36.0          # signed: negative is above the room
 const CAM_FOV := 24.0
 const CAM_DIST := VIEWPORT.y / (2.0 * PPM * tan(deg_to_rad(CAM_FOV * 0.5)))
@@ -47,9 +54,12 @@ const WALL_HEIGHT := RoomBuilder.WALL_HEIGHT
 const HH := House.ROOM_M * 0.5
 const ROOM_TILES := 7
 
+var _noise_level := 0.0       # the loudest recent noise the player made, for the HUD meter
+var _noise_t := 0.0           # seconds left before the meter starts falling
+var _environment: Environment
+var _ambient_lit := false
 var _pitch_deg := CAM_PITCH_DEG
 var _dist := CAM_DIST
-
 var house: House
 var knight: Knight
 var camera: Camera3D
@@ -76,14 +86,35 @@ var _lbl_prompt: Label
 var _lbl_toast: Label
 var _lbl_end: Label
 var _toast_t := 0.0
+var _lbl_noise: Label
 
 
 func _ready() -> void:
+	_read_camera_args()
 	_build_environment()
 	_build_camera()
 	_build_hud()
 	start_run()
 	_report_budget()
+
+
+## --pitch=<deg> --ppm=<px per metre> --name=<shot prefix>. The framing was solved by sweeping
+## these against the measured room coverage (tests/diag.gd, tools/art/sweep.py); keeping the
+## sweep runnable is what lets the numbers be re-checked after the art changes underneath them
+## instead of being taken on trust.
+##
+## PITCH IS SIGNED and the sign is not cosmetic: a negative pitch puts the camera above the room
+## looking down, a positive one puts it below the floor looking up. Passing `--pitch=36` once
+## produced a frame containing nothing but the underside of the floor, which reads exactly like
+## "the props stopped rendering". Magnitude is what callers think in, so the sign is normalised.
+func _read_camera_args() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--pitch="):
+			_pitch_deg = -absf(float(a.trim_prefix("--pitch=")))
+		elif a.begins_with("--ppm="):
+			var ppm := float(a.trim_prefix("--ppm="))
+			if ppm > 1.0:
+				_dist = VIEWPORT.y / (2.0 * ppm * tan(deg_to_rad(CAM_FOV * 0.5)))
 
 
 # =======================================================================================
@@ -122,7 +153,7 @@ func start_run(seed_value: int = 0) -> void:
 	knight.name = "Knight"
 	add_child(knight)
 	knight.position = start_room.centre() + Vector3(0, 0.0, -2.2)
-	knight.apply_depth_scale(cos(deg_to_rad(absf(CAM_PITCH_DEG))))
+	knight.apply_depth_scale(cos(deg_to_rad(absf(_pitch_deg))))
 	knight.died.connect(_on_knight_died)
 	knight.swung.connect(_on_knight_swung)
 	knight.threw.connect(_on_stone_thrown)
@@ -276,6 +307,12 @@ func _on_knight_hurt(hp: int) -> void:
 func _on_noise(at: Vector3, threat: float, kind: String, source: Node = null) -> void:
 	if source != null and source != knight:
 		return
+	# The player's own noise shows on the HUD. Without a visible level, "running is loud" is an
+	# instruction the player has to be told; with one, it is a dial they watch while deciding.
+	# The meter decays, because the state that matters is "how loud am I right now".
+	if source == knight:
+		_noise_level = maxf(_noise_level, threat)
+		_noise_t = 1.6
 	var earshot := threat * HEAR_PER_THREAT
 	for e in _enemies:
 		if not is_instance_valid(e) or not e.alive:
@@ -362,6 +399,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_G and not over:
 			knight.throw_stone()
 			return
+		if event.keycode == KEY_F4:
+			## The darkness A/B. Neither state is wrong: 0.62 is the shipped mood, 1.4 is the
+			## inspection state. Keeping both on one key stops the mood from silently becoming
+			## the thing that hides bugs — which is how a whole previous project shipped a game
+			## nobody could see.
+			_ambient_lit = not _ambient_lit
+			if _environment:
+				_environment.ambient_light_energy = 2.0 if _ambient_lit else 0.95
+			print("ambient -> %s" % ("inspection 2.0" if _ambient_lit else "shipped 0.95"))
+			return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT and not over:
 		if knight.swing():
@@ -392,8 +439,8 @@ func _process(delta: float) -> void:
 
 
 func _camera_target() -> Vector3:
-	var rad := deg_to_rad(CAM_PITCH_DEG)
-	return knight.position + Vector3(0, -sin(rad) * CAM_DIST, cos(rad) * CAM_DIST)
+	var rad := deg_to_rad(_pitch_deg)
+	return knight.position + Vector3(0, -sin(rad) * _dist, cos(rad) * _dist)
 
 
 ## Nearest interactive within range. Distance, not an Area3D: with a dozen props, sorting by
@@ -434,6 +481,28 @@ func _update_hud(delta: float) -> void:
 	else:
 		_lbl_toast.modulate.a = 0.0
 
+	# Noise meter. The player's own noise is the resource they spend, so it has to be visible:
+	# a bar of blocks plus the earshot it buys. The decay is deliberate — the thing that matters
+	# is "how loud am I right now", not "how loud have I been".
+	if _noise_t > 0.0:
+		_noise_t -= delta
+	else:
+		_noise_level = maxf(0.0, _noise_level - delta * 6.0)
+	var blocks := 0
+	if _noise_level > 0.1:
+		blocks = clampi(int(ceil(_noise_level / 2.0)), 1, 7)
+	var word := "安静"
+	if _noise_level >= 10.0:
+		word = "极响"
+	elif _noise_level >= 6.0:
+		word = "很响"
+	elif _noise_level >= 3.0:
+		word = "有动静"
+	elif _noise_level >= 1.0:
+		word = "脚步"
+	_lbl_noise.text = "声响  %s%s   %s   传 %.0f m" % [
+		"■".repeat(blocks), "·".repeat(7 - blocks), word, _noise_level * HEAR_PER_THREAT]
+
 
 # =======================================================================================
 # setup helpers
@@ -444,27 +513,37 @@ func _build_environment() -> void:
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
 	e.background_color = Color("05050a")
+	# Fog is the depth cue that a 7 m room cannot provide on its own: it separates the near
+	# flagstones from the far wall and makes the doorway read as an opening rather than a hole.
 	e.fog_enabled = true
-	e.fog_light_color = Color("0e0e16")
-	e.fog_density = 0.010
+	e.fog_light_color = Color("141422")
+	e.fog_density = 0.006
 	e.fog_sky_affect = 0.0
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color("4a4a5e")
-	# Shipped mood is dark; this is the inspection value, bright enough that a bug cannot hide
-	# in the dark while the loop is being built. Lower it toward 0.25 once the loop is solid —
-	# and lower it in ONE place, because the lantern does the actual lighting.
-	e.ambient_light_energy = 0.45
+	# The ambient is COOL and the lantern is WARM. That split is the whole colour story: the
+	# stone reads blue-grey where nothing is lighting it, and the pool around the player is
+	# tallow-yellow. A neutral ambient makes both the same grey and the lantern stops being a
+	# light source and becomes a brightness control.
+	e.ambient_light_color = Color("55618c")
+	# Shipped value, reached by looking at frames rather than by reasoning about numbers. The
+	# shipped mood is dark, but not so dark that the architecture vanishes — the lantern then has
+	# something to reveal, which is the whole lighting design. F4 toggles an inspection value so
+	# the next person can do the same instead of guessing, and so that a mood can never quietly
+	# become the thing that hides a bug.
+	e.ambient_light_energy = 0.95
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	e.tonemap_exposure = 1.15
-	e.tonemap_white = 6.0
+	e.tonemap_exposure = 1.25
+	e.tonemap_white = 5.0
 	e.ssao_enabled = true
-	e.ssao_radius = 1.4
-	e.ssao_intensity = 2.0
+	e.ssao_radius = 1.6
+	e.ssao_intensity = 2.4
 	e.glow_enabled = true
-	e.glow_intensity = 0.5
-	e.glow_hdr_threshold = 1.1
+	e.glow_intensity = 0.45
+	e.glow_bloom = 0.06
+	e.glow_hdr_threshold = 1.15
 	env.environment = e
 	add_child(env)
+	_environment = e
 
 
 func _build_camera() -> void:
@@ -474,7 +553,7 @@ func _build_camera() -> void:
 	camera.fov = CAM_FOV
 	camera.near = 0.05
 	camera.far = 220.0
-	camera.rotation_degrees = Vector3(CAM_PITCH_DEG, 0, 0)
+	camera.rotation_degrees = Vector3(_pitch_deg, 0, 0)
 	add_child(camera)
 	camera.make_current()
 
@@ -486,6 +565,8 @@ func _build_hud() -> void:
 	_lbl_status = _label(Vector2(24, 18), 20, Color(0.94, 0.88, 0.72))
 	_lbl_prompt = _label(Vector2(24, 610), 26, Color(1.0, 0.88, 0.55))
 	_lbl_toast = _label(Vector2(24, 664), 20, Color(0.86, 0.86, 0.9))
+	# The noise meter: the player's own noise is the resource they spend, so it is drawn.
+	_lbl_noise = _label(Vector2(24, 158), 18, Color(0.78, 0.86, 1.0))
 	_lbl_end = _label(Vector2(0, 380), 40, Color(1.0, 0.86, 0.5))
 	_lbl_end.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_lbl_end.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)

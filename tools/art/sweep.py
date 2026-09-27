@@ -28,6 +28,15 @@ DEFAULT_PITCH = [30.0, 36.0, 42.0, 48.0]
 
 
 def run_one(pitch: float, ppm: float, timeout: int = 120) -> tuple[Path, str]:
+    """Render one camera setting through the real game and return its opening frame.
+
+    The name is passed to the game, and tests/shot.gd saves a handful of frames per run
+    (`<name>_start`, `<name>_door`, `<name>_rite`, ...). Looking for `<name>.png` finds nothing
+    and the sweep reports "no screenshot produced" for every setting, which is exactly what
+    happened the first time this ran against the vertical slice. The opening frame is the one
+    that shows the room unfurnished by whatever the test did to it, so that is the one to judge
+    framing from.
+    """
     name = f"sweep_p{int(pitch):02d}_ppm{int(ppm):02d}"
     log = ROOT / "tests" / "_sweep.log"
     with log.open("w", encoding="utf-8", errors="replace") as fh:
@@ -35,7 +44,7 @@ def run_one(pitch: float, ppm: float, timeout: int = 120) -> tuple[Path, str]:
             [str(GODOT), "--path", str(ROOT), "--", "--shot",
              f"--pitch={pitch}", f"--ppm={ppm}", f"--name={name}"],
             stdout=fh, stderr=subprocess.STDOUT, timeout=timeout, check=False)
-    shot = SHOTS / f"{name}.png"
+    shot = SHOTS / f"{name}_start.png"
     notes = ""
     if log.is_file():
         for line in log.read_text(encoding="utf-8", errors="replace").splitlines():

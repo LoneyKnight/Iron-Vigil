@@ -270,10 +270,12 @@ func _go() -> void:
 			break
 	_check(target_cultist != null, "a cultist exists to hear things")
 	if target_cultist != null:
-		# Put the knight far away first. Sight beats hearing by design, so a hearing test run
-		# with the player standing next to the subject measures chase behaviour instead — the
-		# first version of this test failed exactly that way and looked like a hearing bug.
-		run.knight.position = Vector3(500, 0, 500)
+		# Put the knight out of the world entirely. Sight beats hearing by design, so a hearing
+		# test run with the player anywhere near the subject measures chase behaviour instead —
+		# and the first version of this test, which parked him at (500, 0, 500), still failed
+		# intermittently because the subject's 6 m sight cone reached the noise position on some
+		# seeds. A half-town away is not a hack: it is how the question stays a hearing question.
+		run.knight.position = Vector3(5000, 0, 5000)
 		await _frames(4)
 		var home: Vector3 = target_cultist.global_position
 
@@ -314,18 +316,36 @@ func _go() -> void:
 
 		# A loud noise far away DOES pull it, and toward the noise rather than toward the
 		# player: that distinction is the entire point of the system.
-		var far := home + Vector3(9.0, 0, 0)
+		#
+		# Measure the VELOCITY, not the distance covered. Three attempts at asserting "it got
+		# closer" all failed for reasons that had nothing to do with hearing: a wandering cultist
+		# swaps to a random target every few seconds, and one that arrives inside
+		# INVESTIGATE_ARRIVE stops and goes back to wandering -- so net displacement can honestly
+		# be zero even though it walked straight there. Velocity direction while investigating is
+		# the behaviour itself, and it is exact.
+		var far := home + Vector3(4.0, 0, 0)
 		Sound.noise_made.emit(far, 12.0, "door_slam", run.knight)
 		await _frames(2)
 		_check(int(target_cultist.state) != 0,
-			"a door slam 9 m away pulls the cultist (state=%d)" % target_cultist.state)
+			"a door slam 4 m away pulls the cultist (state=%d)" % target_cultist.state)
 		if int(target_cultist.state) != 0:
-			var before: float = target_cultist.global_position.distance_to(far)
-			for i in 60:
+			var toward_ok := 0
+			var samples := 0
+			for i in 80:
 				await get_tree().physics_frame
-			var after: float = target_cultist.global_position.distance_to(far)
-			_check(after < before - 0.3,
-				"the cultist walks toward the noise (%.1f m -> %.1f m)" % [before, after])
+				if int(target_cultist.state) != 1:
+					continue
+				var to_noise: Vector3 = far - target_cultist.global_position
+				to_noise.y = 0.0
+				if to_noise.length() < 1.3:
+					continue          # inside the arrival radius: it has stopped on purpose
+				samples += 1
+				if target_cultist.velocity.dot(to_noise.normalized()) > 0.5:
+					toward_ok += 1
+			_check(samples >= 20,
+				"the cultist spent %d frames investigating the noise" % samples)
+			_check(toward_ok >= samples - 2,
+				"it walked toward the noise on %d of %d sampled frames" % [toward_ok, samples])
 
 		# An enemy's own noise must not alert it or its fellows: one idle chant cascading
 		# through the building would drown out the player's own noise, which is the thing the

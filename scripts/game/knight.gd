@@ -98,8 +98,8 @@ func _ready() -> void:
 	lantern = SpotLight3D.new()
 	lantern.name = "Lantern"
 	lantern.light_color = Color("ffc46e")
-	lantern.light_energy = 16.0
-	lantern.spot_range = 16.0
+	lantern.light_energy = 20.0
+	lantern.spot_range = 18.0
 	# A hand-held lantern lights the ground around the bearer, not the wall ahead of him. The
 	# two failure modes are both easy to hit and both look wrong in a pitched view: aim it
 	# forward and the knight is a silhouette against a lit door with the room in black; aim it
@@ -120,7 +120,7 @@ func _ready() -> void:
 	var pool := OmniLight3D.new()
 	pool.name = "Footpool"
 	pool.light_color = Color("ffcf8a")
-	pool.light_energy = 3.2
+	pool.light_energy = 4.0
 	pool.omni_range = 4.2
 	pool.omni_attenuation = 1.8
 	pool.position = Vector3(0, 1.1, 0)
