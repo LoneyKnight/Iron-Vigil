@@ -19,10 +19,15 @@ func _ready() -> void:
 	if scene == null:
 		push_error("boot: res://scenes/main.tscn failed to load")
 		return
+	var args := OS.get_cmdline_user_args()
+	if "--selftest" in args:
+		# Needs no scene at all: pure logic, data and asset presence, in about a second. This is
+		# the check that runs before every export; tests/shot.gd is the one that proves the loop.
+		add_child(load("res://tests/selftest.gd").new())
+		return
 	add_child(scene.instantiate())
 	# Verification entry points. Kept here so the game and its tests start from the same scene
 	# and the same input map — a test that builds its own world tests its own world.
-	var args := OS.get_cmdline_user_args()
 	if "--diag" in args:
 		add_child(load("res://tests/diag.gd").new())
 	elif "--shot" in args:

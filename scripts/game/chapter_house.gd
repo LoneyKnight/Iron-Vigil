@@ -122,9 +122,18 @@ func generate(room_count: int = 8, seed_value: int = 0) -> void:
 			room.enemy_spawn.append(room.centre() + Vector3(1.2, 0.0, 1.0))
 			cultists += 1
 
-	# One floor material per room, chosen from the three the generator has footstep clips for.
-	# A material with no clip would be a silent floor, which is worse than a boring one.
-	var themes := ["stone", "stone", "wood", "cloth"]
+	# One floor material per room, chosen from the themes that actually have both a footstep clip
+	# and a tile texture. A theme with a clip but no art falls back to the procedural floor, and
+	# the player sees one room with a subtly different, hand-drawn-looking floor and no error
+	# anywhere — which is exactly the kind of quiet wrongness tests/selftest.gd exists to catch.
+	#
+	# `wood` and `cloth` are in this list deliberately and currently have no tile art: they are
+	# declared as wanted-but-missing so the gap is visible in one place rather than discovered by
+	# eye. Add the art and the room stops looking different; there is nothing else to change.
+	var themes := ["stone"]
+	for candidate in ["wood", "cloth"]:
+		if ResourceLoader.exists("res://assets/tiles/floor_%s.png" % candidate):
+			themes.append(candidate)
 	for cell in order:
 		rooms[cell].theme = themes[rng.randi_range(0, themes.size() - 1)]
 	rooms[entrance].theme = "stone"
