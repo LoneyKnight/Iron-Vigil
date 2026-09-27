@@ -23,3 +23,6 @@ __pycache__/
 
 # Screenshots written by tests (keep the baseline folder, ignore the runs).
 /tests/shots/_*.png
+
+# Exported binaries: large, regenerable, and not source.
+/build/
