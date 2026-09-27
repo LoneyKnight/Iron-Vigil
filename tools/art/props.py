@@ -99,9 +99,11 @@ EDGE_MARGIN = 2        # raw silhouette this close to the canvas edge = possibly
 # disagree with its own box. Anything listed as "task table" is not adjustable here.
 SPECS: dict[str, dict] = {
     "door_closed": {"group": "props", "plane": "wall", "world": (1.6, 2.6),
-                    "note": "door, closed - width is door.gd's 1.6 m collision box"},
+                    "note": "door, closed - width-locked in prop_util.sprite(width_m=1.6): "
+                            "the 1.60 x 2.28 m drawing would be 1.82 m wide if scaled by its "
+                            "authorised height, which buries it in both jambs"},
     "door_open": {"group": "props", "plane": "wall", "world": (1.6, 2.6),
-                  "note": "door, open leaf - same 1.6 m box"},
+                  "note": "door, open leaf - same 1.6 m box, same width lock"},
     "chest_closed": {"group": "props", "plane": "wall", "world": (1.0, 0.7),
                      "note": "chest, closed (task table)"},
     "chest_open": {"group": "props", "plane": "wall", "world": (1.0, 0.93),
