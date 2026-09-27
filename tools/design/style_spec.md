@@ -5,14 +5,15 @@
 > and a character that was never displayed 1:1 because these numbers were never fixed;
 > this file exists so that cannot happen again.
 
-## 0. The four locked numbers
+## 0. The locked numbers
 
 | # | Quantity | Value | Why |
 |---|---|---|---|
-| 1 | Screen pixels per floor tile | **32 px** | player reads the room; 4.6 rooms across a 1920 view |
-| 2 | Knight height on screen | **59 px** = 1.85 tiles | large enough to read armour, small enough to be a person in a room |
-| 3 | Game pixel : screen pixel | **1 : 1** | the atlas is authored at exactly the size the game shows |
+| 1 | Screen px per metre of ground | **85** | measured: puts a 7 m room at 34% of the frame |
+| 2 | Knight height on screen | **128 px** (1.80 m world) | armour and lantern read at this size |
+| 3 | Wall height on screen | **316 px** (4.6 m world) | side walls must be surfaces, not edges |
 | 4 | Reference resolution | **1920 × 1080** | the screen the art is budgeted against |
+| 5 | Room | **7 × 7 m** | a chapter house, not a hall — see §2.1 |
 
 **Corollary — and the whole point of choosing HD-2D:** the world is drawn by a real
 `Camera3D`, so a sprite's apparent size comes from 3D perspective, not from a CanvasItem
@@ -24,28 +25,81 @@ the character is always exactly the size the atlas was authored at.
 
 | Parameter | Value | Note |
 |---|---|---|
-| Type | `Camera3D`, perspective | |
-| Pitch | **−52°** | HD-2D read: enough height for a room, enough angle to see faces |
-| FOV | **34°** | narrow on purpose: keeps the pixel scale uniform across the frame |
-| Distance to subject | **7.5 m** | derived: at 34° FOV the vertical span is ≈ 4.6 m |
-| Yaw | fixed (no rotation) | the level is authored for one angle; no "rotate the world" verb |
-| Follow | lerp toward the player, ~9/s | same feel as Black Room's top-down camera |
-| Far / near | 60 m / 0.05 m | |
+| Type | `Camera3D`, **perspective** | not a preference — see §1.1 |
+| Pitch | **−36°** | **signed**: negative puts the camera above the room |
+| FOV | **24°** | narrow, which compresses depth the way HD-2D does |
+| Distance to focus | **50.6 m** | solved: `VH / (2 · PPM · tan(fov/2))` |
+| Yaw | fixed (no rotation) | the level is authored for one angle |
+| Follow | lerp toward the player, 9/s | |
+| Near / far | 0.05 / 200 m | |
 
-**Verification (do this after any camera change).** Put the knight at world origin and
-measure his on-screen height. It must be **59 px ± 2**. If it is not, fix the camera —
-do not "fix" the art. A one-off script that reads the sprite's projected screen height is
-the cheapest test in the project.
+### 1.1 Why perspective, and what it costs
+
+The first playable frame was **orthographic**, chosen to keep pixel density exactly constant.
+It did not read as HD-2D at all: a parallel projection has no vanishing point, so the room
+came out as a **flat floor plan with a light on it**. The look depends on convergence, fog
+and a shallow focal plane. Perspective costs a few percent of density variation across the
+frame — the test tolerance is 6% for that reason — and buys the depth.
+
+### 1.2 The trigonometry, once
+
+Measured on the live camera (the CALIB lines in `tests/shot.gd`), one metre of world along
+each axis projects to:
+
+| World axis | Screen px per metre | Factor |
+|---|---|---|
+| X — across the ground | **85.0** | `ppm` |
+| Z — into the ground | **68.8** | `ppm · cos(pitch)` |
+| Y — **height** | **68.8** | `ppm · cos(pitch)` |
+
+A metre of **height** and a metre of **depth** foreshorten **together**: both lie in the
+plane the camera looks along. A metre of width does not. Therefore
+
+```
+figure_px = height_m × ppm × cos(pitch)
+wall_px   = wall_m   × ppm × cos(pitch)
+```
+
+An earlier version of this spec said `sin(pitch)`. That is wrong, and it produced a spec
+claiming a 59 px knight while the engine rendered 36. The CALIB print caught it and is kept
+as a standing diagnostic for exactly that reason.
+
+### 1.3 Verify after any camera change
+
+Put the knight at the focus point and measure. Do **not** fix the art to match a broken
+camera.
+
+| Quantity | Expected |
+|---|---|
+| pixels per metre of ground | 85.0 ± 0.5 |
+| knight on screen | 128 px ± 6% |
+| wall face | 316 px ± 5% |
+| room coverage | ≥ 25% of the frame in both axes |
 
 ## 2. World scale
 
 | Quantity | Value |
 |---|---|
 | 1 tile | 1.0 m |
-| 1 game pixel | **1/32 m** = 0.03125 m |
-| 1 room | 13 × 13 tiles = 13 m = 416 screen px |
-| Wall height | 3.2 m |
-| Knight (game px) | 59 × 59 px sprite; ≈ 1.84 m tall in world units |
+| 1 room | **7 × 7 tiles** = 7 m = 595 px wide on screen |
+| Wall height | **4.6 m** |
+| Knight | 1.80 m world → 128 px on screen |
+| Visible ground | 22.6 m wide ≈ 1.7 rooms |
+
+### 2.1 Why the room is 7 tiles and not 13
+
+It was 13, inherited from the previous project, and that one number is why the knight looked
+like a speck: at 1.8 m tall he filled 14% of the room's width, so the camera had to pull back
+to show the room and he shrank with it. Seven tiles reads as a real medieval chamber and
+makes the figure a plausible occupant of it.
+
+### 2.2 Three walls, not four
+
+The camera sits outside the south wall, so a full-height south wall is the nearest object in
+frame and hides the room behind it — the first 7 m frame was mostly a grey slab. This is the
+cutaway HD-2D depends on, and it is why the reference images all show architecture receding
+away from the viewer with nothing between camera and subject. The south edge keeps a 0.55 m
+parapet so the room still reads as enclosed rather than as a floor floating in space.
 
 ## 3. Three layers, three rules
 

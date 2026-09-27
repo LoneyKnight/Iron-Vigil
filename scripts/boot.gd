@@ -20,7 +20,9 @@ func _ready() -> void:
 	# Verification entry points. Kept here so the prototype and its test start from the
 	# same scene, exactly as the game does.
 	var args := OS.get_cmdline_user_args()
-	if "--shot" in args:
+	if "--diag" in args:
+		add_child(load("res://tests/diag.gd").new())
+	elif "--shot" in args:
 		add_child(load("res://tests/shot.gd").new())
 
 

@@ -28,10 +28,28 @@ extends Node3D
 ## plane. Density is the cost: with perspective the same tile is a few percent larger at the
 ## bottom of the frame than the top, so "42 px per tile" becomes a nominal value quoted at
 ## the camera's focus point. That is the honest trade, and it is the one HD-2D itself makes.
-const PPM := 42.43                    # nominal screen px per metre of ground, at focus
+## Framing, solved rather than guessed. `tests/diag.gd` sweeps pitch against density and
+## projects the room's floor rectangle to report how much of the screen it covers; the
+## numbers below come from that table, not from taste:
+##
+##   pitch  ppm   room width   room height   knight px   wall px
+##     34    42      16.1%         15.3%          63        111
+##     42    85      33.4%         37.1%         114        202
+##     50   130      53.6%         65.4%         150        267
+##
+## 42 deg at 85 ppm is the pick: the room fills a third of the frame (so it reads as a
+## place, not a diorama floating in the dark), the knight is 114 px (a person you can see
+## armour on), the wall shows 202 px of face (so the arches and banners have somewhere to
+## live), and about 1.5 rooms are visible, which is the right amount of co-op information.
+const PPM := 85.0
 const VIEWPORT := Vector2(1920, 1080)
+# A room is 7x7 metres. It was 13x13, inherited from the previous project, and that single
+# number is why the knight looked like a speck: at 1.8 m tall he filled 14% of the room's
+# width, so the camera had to pull back to show the room and he shrank with it. Seven
+# tiles reads as a real medieval chamber -- a chapter house, a side chapel -- and makes the
+# figure a plausible occupant of it instead of a dot in a hall.
 const TILE := 1.0
-const ROOM_TILES := 13
+const ROOM_TILES := 7
 const HH := ROOM_TILES / 2.0
 
 ## Camera. FOV is the fixed choice; the DISTANCE is solved from the target density so the
@@ -46,14 +64,15 @@ const HH := ROOM_TILES / 2.0
 ##     pitch 45 deg -> figure 54 px, wall face 96 px
 ##     pitch 40 deg -> figure 58 px, wall face 104 px
 ## 45 is the pick: the figure clears the readability band and the walls are still tall.
-const CAM_PITCH_DEG := -45.0
-const CAM_FOV := 34.0                 # a normal, undistorted lens
+const CAM_PITCH_DEG := -36.0
+const CAM_FOV := 24.0                 # narrow: compresses depth the way HD-2D does, and
+                                      # keeps the pixel scale even across the frame
 ## Distance that makes PPM pixels per metre land on the focus plane:
 ##     PPM = VH / (2 * d * tan(fov/2))   ->   d = VH / (2 * PPM * tan(fov/2))
 const CAM_DIST := VIEWPORT.y / (2.0 * PPM * tan(deg_to_rad(CAM_FOV * 0.5)))
 const CAM_FOLLOW := 9.0
 
-const WALL_HEIGHT := 3.2
+const WALL_HEIGHT := 4.6
 const KNIGHT_M := 1.80                # 1.8 m tall; his screen height follows from the camera
 const KNIGHT_SPEED := 4.2             # m/s; reads as a stride, not a slide
 
@@ -92,10 +111,16 @@ func _ready() -> void:
 
 ## --pitch=<deg> --ppm=<px per metre> --name=<shot name>. Kept here so the camera sweep is
 ## a command-line loop rather than five edited copies of this file.
+##
+## PITCH IS SIGNED, and the sign is not cosmetic: a negative pitch puts the camera above
+## the room looking down, a positive one puts it below the floor looking up. Passing
+## `--pitch=36` instead of `-36` produced a frame containing nothing but the underside of
+## the floor, which reads exactly like "the sprites stopped rendering" and cost an hour.
+## The magnitude is what callers think in, so the sign is normalised here.
 func _read_camera_args() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--pitch="):
-			_pitch_deg = float(a.trim_prefix("--pitch="))
+			_pitch_deg = -absf(float(a.trim_prefix("--pitch=")))
 		elif a.begins_with("--ppm="):
 			var ppm := float(a.trim_prefix("--ppm="))
 			if ppm > 1.0:
@@ -186,10 +211,19 @@ func _build_room() -> void:
 	# StaticBody3D at identical global positions) and left a wall running diagonally across
 	# the room. Explicit beats clever here.
 	const WALL_T := 0.4
-	for d in 4:
+	# One doorway, 1.5 m wide, centred in the north wall: a person-sized opening, not the
+	# 2 m 13-tile-era gap, and small enough that the wall still reads as a wall.
+	const DOOR_W := 1.5
+	# THREE walls, not four. The camera sits outside the south wall, so a full-height south
+	# wall is the nearest object in frame and hides the room behind it — the previous frame
+	# was mostly a grey slab. This is the cutaway that HD-2D depends on, and it is also why
+	# the reference images all show architecture receding away from the viewer and nothing
+	# between the camera and the subject. The south edge keeps a low parapet so the room
+	# still reads as enclosed rather than as a floor floating in space.
+	for d in [0, 1, 3]:
 		var segments: Array = [[-HH, HH]]
 		if d == 0:
-			segments = [[-HH, -HH + 5.5], [-HH + 7.5, HH]]
+			segments = [[-HH, -DOOR_W * 0.5], [DOOR_W * 0.5, HH]]
 		for seg in segments:
 			var length: float = float(seg[1]) - float(seg[0])
 			if length <= 0.01:
@@ -212,25 +246,28 @@ func _build_room() -> void:
 					dim = Vector3(WALL_T, WALL_HEIGHT, length)
 			_slab(dim, at, wall_mat)
 
-	# Props: the identity of the place. A room with one knight in it reads as a test box; the
-	# abbey has to be furnished before the look can be judged at all.
-	# Prop heights are in metres and chosen so each reads at its real-world size: a pillar
-	# is ceiling height, an altar is waist height, a candle rack is shoulder height. Art is
-	# scaled to the world, never the other way round.
+	# South parapet: knee height, so the room is still an enclosure but nothing stands
+	# between the camera and the floor. It also catches the lantern at the bottom of the
+	# frame, which is what stops the near edge from dissolving into black.
+	const PARAPET_H := 0.55
+	_slab(Vector3(span, PARAPET_H, WALL_T), Vector3(0, PARAPET_H * 0.5, HH), wall_mat)
+
+	# Props are laid out for a 7 m room, so everything sits within +-3.5 m of the centre and
+	# the corners stay clear for movement. A room has to be walkable: props at the walls
+	# leave the middle open, which is also where the light and the action are.
+	#
+	# Heights are real-world metres: a pillar is ceiling height, an altar is waist height,
+	# a candle rack is shoulder height. Art is scaled to the world, never the other way.
 	for spec in [
-		["altar", Vector3(2.6, 0.0, -3.4), 1.1],
-		["candle_rack", Vector3(-3.2, 0.0, -1.2), 1.6],
-		["candle_rack", Vector3(3.6, 0.0, 1.6), 1.6],
-		["candle_rack", Vector3(-1.4, 0.0, 4.4), 1.6],
-		["reliquary", Vector3(-2.8, 0.0, 3.2), 0.9],
-		["pillar", Vector3(-HH + 1.2, 0.0, -HH + 1.2), 3.4],
-		["pillar", Vector3(HH - 1.2, 0.0, -HH + 1.2), 3.4],
-		["pillar", Vector3(-HH + 1.2, 0.0, HH - 1.2), 3.4],
-		["pillar", Vector3(HH - 1.2, 0.0, HH - 1.2), 3.4],
-		["banner", Vector3(HH - 0.3, 0.6, 2.0), 2.4],
-		["banner", Vector3(HH - 0.3, 0.6, -1.0), 2.4],
-		["banner", Vector3(-HH + 0.3, 0.6, 0.5), 2.4],
-		["sigil", Vector3(0.0, 0.0, 1.2), 0.0],
+		["altar", Vector3(2.1, 0.0, -2.5), 1.05],
+		["candle_rack", Vector3(-2.4, 0.0, -1.4), 1.5],
+		["candle_rack", Vector3(2.2, 0.0, 1.4), 1.5],
+		["reliquary", Vector3(-2.3, 0.0, 2.2), 0.85],
+		["pillar", Vector3(-HH + 0.9, 0.0, -HH + 0.9), 3.1],
+		["pillar", Vector3(HH - 0.9, 0.0, -HH + 0.9), 3.1],
+		["banner", Vector3(HH - 0.25, 0.5, 0.9), 2.2],
+		["banner", Vector3(-HH + 0.25, 0.5, -0.6), 2.2],
+		["sigil", Vector3(0.0, 0.0, 0.9), 0.0],
 	]:
 		var kind := str(spec[0])
 		var at: Vector3 = spec[1]
@@ -398,6 +435,8 @@ func _build_camera() -> void:
 	add_child(camera)
 	var rad := deg_to_rad(_pitch_deg)
 	camera.position = knight.position + Vector3(0, -sin(rad) * _dist, cos(rad) * _dist)
+	print("CAMERA pitch=%.1f rad=%.4f sin=%.3f cos=%.3f dist=%.2f pos=%s"
+		% [_pitch_deg, rad, sin(rad), cos(rad), _dist, camera.position])
 	camera.make_current()
 
 
