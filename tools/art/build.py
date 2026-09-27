@@ -36,14 +36,14 @@ FIGURES = {
     "cultist": ("enemies/cultist", 112),
     "penitent": ("enemies/penitent", 112),
 }
+# Legacy prop pass: one trimmed image each, capped at 128 px. The batch-1 assets (door,
+# chest, altar, candle rack, pillar, banner, sigil) are NOT here any more — they have an
+# authorised screen size derived from the camera maths and are built by tools/art/props.py,
+# which also reports the deviation. Leaving them in this map would silently overwrite the
+# sized assets with 128 px versions on the next run.
 PROPS = {
-    "pillar": "props",
     "arch_door": "props",
-    "altar": "props",
-    "candle_rack": "props",
     "reliquary": "props",
-    "banner": "props",
-    "sigil": "props",
 }
 
 
@@ -139,7 +139,18 @@ def build(check_only: bool = False) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true", help="report only, write nothing")
+    ap.add_argument("--batch1", action="store_true",
+                    help="build the interactive props, decor and ground tiles at their "
+                         "authorised screen size (tools/art/props.py) and print the "
+                         "deviation table")
+    ap.add_argument("--only", nargs="*", default=None,
+                    help="with --batch1: build only these asset names")
     args = ap.parse_args()
+    if args.batch1:
+        # The size table, the gates and the report live in props.py; this file stays the
+        # single entry point for the art pipeline.
+        import props
+        return props.build_batch1(check_only=args.check, only=args.only)
     return build(check_only=args.check)
 
 

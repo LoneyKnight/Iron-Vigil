@@ -14,6 +14,10 @@ const HEIGHT := 2.6
 var dir := 0
 var cell := Vector2i.ZERO
 var opened := false
+## How hard the door is being pushed, 0..1. Set by the caller before `interact()`: a `run`
+## sets it high when the player was running, so that "open it quietly" is a decision the game
+## can actually hear. Defaults to a normal push.
+var push_force := 0.45
 
 var _panel: MeshInstance3D
 var _body: StaticBody3D
@@ -47,6 +51,12 @@ func interact(_run) -> void:
 	if opened:
 		return
 	opened = true
+	# The noise is the decision. A gentle push is a creak that carries a few metres; a running
+	# shoulder into it is heard across the floor. This is the single most important sound in
+	# the game, because it is the one the player chooses to make or not make.
+	var clip := "door_open_hard" if push_force > 0.6 else "door_open_soft"
+	var threat := lerpf(2.5, 11.0, clampf(push_force, 0.0, 1.0))
+	Sound.play(clip, global_position, threat, randf_range(0.95, 1.05))
 	# Slide the panel into the floor and drop the collider. No animation art needed: the door
 	# visibly going away is the whole message.
 	var tw := create_tween()

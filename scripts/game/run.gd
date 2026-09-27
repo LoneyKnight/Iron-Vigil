@@ -34,6 +34,11 @@ const LOOT_NAMES := {
 	"relic_dagger": "仪式匕首", "relic_tallow": "守夜油脂",
 }
 const INTERACT_RANGE := 2.4
+## How far a noise carries, in metres, per unit of threat. The ratio matters more than the
+## absolute: a footstep (1.5) reaches 2.6 m and a shouldered door (14) reaches 24 m. Tuned by
+## ear, and tunable in one place because it is one number.
+const HEAR_PER_THREAT := 1.7
+const STONE_GRAVITY := 14.0
 
 # --- values the camera tests read. Kept here so tests/shot.gd can verify the framing of the
 # --- REAL game rather than a prototype that happens to be nearby.
@@ -120,8 +125,16 @@ func start_run(seed_value: int = 0) -> void:
 	knight.apply_depth_scale(cos(deg_to_rad(absf(CAM_PITCH_DEG))))
 	knight.died.connect(_on_knight_died)
 	knight.swung.connect(_on_knight_swung)
+	knight.threw.connect(_on_stone_thrown)
 	for e in _enemies:
 		e.set_target(knight)
+
+	# Sound: the listener is the knight, and every noise the world makes is offered to
+	# everything that can hear it. Connecting here rather than inside Sound keeps the rule
+	# visible — the run decides who has ears.
+	Sound.set_listener(knight)
+	if not Sound.noise_made.is_connected(_on_noise):
+		Sound.noise_made.connect(_on_noise)
 
 	camera.position = _camera_target()
 	visited[house.entrance] = true
@@ -183,11 +196,16 @@ func _on_knight_died() -> void:
 # loop
 # =======================================================================================
 
-func collect(loot: String, _at: Vector3) -> void:
+func collect(loot: String, at: Vector3) -> void:
 	if loot in RELICS:
 		relics[loot] = true
+		# Two different sounds for two different sizes of event. Ordinary loot is a bright
+		# little chime; a relic is long and low and outlasts the player's movement, so the
+		# player can tell they picked up the thing that matters without reading a line.
+		Sound.play("relic_pickup", at, 8.0)
 		_toast("获得圣物：%s（%d/%d）" % [RELIC_NAMES.get(loot, loot), relics.size(), RELICS.size()], 4.0)
 	else:
+		Sound.play("pickup", at, 2.0)
 		_toast("获得 %s" % LOOT_NAMES.get(loot, loot), 2.0)
 
 
@@ -241,6 +259,82 @@ func _on_knight_hurt(hp: int) -> void:
 
 
 # =======================================================================================
+# hearing: the other half of the sound system
+# =======================================================================================
+
+## Everything that can hear a noise is told about it. This is the rule that makes sound a
+## resource rather than an effect: a noise the player makes pulls the opposition toward the
+## place it was made, so making one is a decision with a cost.
+##
+## There is no line-of-sight test here on purpose. Sound goes around corners and through
+## walls; that is precisely why it is useful and precisely why it is dangerous.
+func _on_noise(at: Vector3, threat: float, kind: String) -> void:
+	var earshot := threat * HEAR_PER_THREAT
+	for e in _enemies:
+		if not is_instance_valid(e) or not e.alive:
+			continue
+		if e.global_position.distance_to(at) <= earshot:
+			e.hear_noise(at, threat)
+
+
+## The player's answer to being heard: a stone that lands somewhere else.
+##
+## Simulated here rather than as a physics body because the whole point is WHERE it lands and
+## how loud that is; a rigid body would add a solver, a collider layer and a spawn/despawn
+## problem to answer a question that is one parabola.
+func _on_stone_thrown(from: Vector3, toward: Vector3) -> void:
+	var mesh := MeshInstance3D.new()
+	var ball := SphereMesh.new()
+	ball.radius = 0.09
+	ball.height = 0.18
+	mesh.mesh = ball
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color("5a5751")
+	mat.roughness = 1.0
+	mesh.material_override = mat
+	add_child(mesh)
+
+	# Throw along the aim, with an upward arc so it clears furniture and reads as a throw.
+	var dir := Vector3(toward.x, 0.0, toward.z).normalized()
+	var flight := Vector3(dir.x, 0.0, dir.z) * Knight.THROW_SPEED + Vector3(0, 6.4, 0)
+	var t := 0.0
+	var at := from
+	while t < 3.0:
+		var dt := get_process_delta_time()
+		if dt <= 0.0:
+			dt = 1.0 / 60.0
+		t += dt
+		flight.y -= STONE_GRAVITY * dt
+		at += flight * dt
+		if at.y <= 0.12:
+			break
+		mesh.global_position = at
+		await get_tree().process_frame
+		if not is_instance_valid(mesh):
+			return
+
+	var landed := Vector3(at.x, 0.09, at.z)
+	mesh.global_position = landed
+	# The landing is what matters: it is the loudest thing the player can arrange to happen
+	# somewhere they are not.
+	Sound.play("stone_impact", landed, Knight.NOISE_STONE_LAND)
+	_toast("石头落地 · 动静传得很远", 1.6)
+	var tw := create_tween()
+	tw.tween_property(mesh, "scale", Vector3(0.01, 0.01, 0.01), 0.6)
+	tw.tween_callback(mesh.queue_free)
+
+
+## The floor under the player decides which footstep clip plays, so the mix changes as they
+## move through the building. One string on the knight; the room owns the material.
+func _update_surface() -> void:
+	var cell := Vector2i(
+		roundi(knight.global_position.x / House.ROOM_PITCH),
+		roundi(knight.global_position.z / House.ROOM_PITCH))
+	var room = house.rooms.get(cell)
+	knight.surface = "stone" if room == null else str(room.theme)
+
+
+# =======================================================================================
 # per frame
 # =======================================================================================
 
@@ -258,14 +352,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			if target != null:
 				target.interact(self)
 			return
+		if event.keycode == KEY_G and not over:
+			knight.throw_stone()
+			return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT and not over:
-		knight.swing()
+		if knight.swing():
+			Sound.play("swing", knight.global_position, Knight.NOISE_SWING)
 
 
 func _physics_process(_delta: float) -> void:
 	if over or knight == null:
 		return
+	_update_surface()
 	var room_cell := Vector2i(
 		roundi(knight.global_position.x / House.ROOM_PITCH),
 		roundi(knight.global_position.z / House.ROOM_PITCH))
@@ -313,8 +412,8 @@ func _update_hud(delta: float) -> void:
 	var relic_txt := ""
 	for r in RELICS:
 		relic_txt += ("◆ " if relics.has(r) else "◇ ") + str(RELIC_NAMES.get(r, r)) + "   "
-	_lbl_status.text = "生命 %d/%d      圣物 %d/%d\n%s\n房间 %d/%d   击杀 %d" % [
-		knight.hp, Knight.MAX_HP, relics.size(), RELICS.size(), relic_txt,
+	_lbl_status.text = "生命 %d/%d      圣物 %d/%d      石头 %d\n%s\n房间 %d/%d   击杀 %d" % [
+		knight.hp, Knight.MAX_HP, relics.size(), RELICS.size(), knight.stones, relic_txt,
 		visited.size(), house.rooms.size() if house else 0, killed]
 	if _nearby != null and is_instance_valid(_nearby):
 		_lbl_prompt.text = "[E] " + str(_nearby.prompt())

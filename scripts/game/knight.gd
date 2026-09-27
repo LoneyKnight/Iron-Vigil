@@ -7,12 +7,29 @@ extends CharacterBody3D
 
 signal died
 signal swung(at: Vector3, facing: Vector3)
+signal threw(from: Vector3, toward: Vector3)
 
 const SPEED := 4.6                 # m/s: a walk, not a sprint, so rooms feel like rooms
+## Running. Holding Shift nearly doubles the speed and more than quadruples the noise, which
+## is the trade the whole sound system is built around: distance bought with attention.
+const SPEED_RUN := 7.8
 const SPRITE_H := 1.80             # world height that lands on the 128 px design target
 const SWING_TIME := 0.35
 const SWING_REACH := 1.9
 const MAX_HP := 100
+## Seconds between footfalls, walking and running. Running is not just faster steps, it is
+## louder ones — see NOISE_* below.
+const STEP_WALK := 0.46
+const STEP_RUN := 0.30
+## Threat values. These are the design, not the mixing: the ratio between a footstep and a
+## door slam decides how much attention each action costs the player.
+const NOISE_STEP := 1.5
+const NOISE_RUN := 6.0
+const NOISE_SWING := 3.0
+const NOISE_HURT := 5.0
+const NOISE_STONE_LAND := 9.0      # deliberately louder than a footstep and quieter than a slam
+const THROW_SPEED := 12.0
+const THROW_MAX := 3
 
 var hp := MAX_HP
 var alive := true
@@ -20,6 +37,13 @@ var facing := Vector3(0, 0, 1)     # unit vector on the ground plane
 var sprite: Sprite3D
 var body: CollisionShape3D         # named so callers and tests can find it
 var lantern: SpotLight3D
+var stones := THROW_MAX
+var running := false
+
+var _step_t := 0.0
+## Which footstep clip to use. Set by the run from the room's floor theme, so the mix changes
+## as the player moves through the building without the knight needing to know about rooms.
+var surface := "stone"
 
 var _swing_t := 0.0
 var _swing_hits: Array = []        # ids already hit by the current swing
@@ -134,10 +158,31 @@ func _physics_process(delta: float) -> void:
 	# Screen-relative movement: W walks away from the camera wherever the body is facing.
 	# That is what the hand expects under a fixed camera, and it is why the camera never
 	# rotates.
-	velocity = Vector3(input.x, 0.0, input.y * _depth_scale).normalized() * SPEED
+	running = Input.is_action_pressed("run") and input.length_squared() > 0.01
+	var speed := SPEED_RUN if running else SPEED
+	velocity = Vector3(input.x, 0.0, input.y * _depth_scale).normalized() * speed
 	move_and_slide()
 	_swing_t = maxf(0.0, _swing_t - delta)
+	_footsteps(delta)
 	_update_frame(delta)
+
+
+## Footsteps, and the noise they make. The interval follows the actual speed rather than a
+## timer, so a player who is slowed by anything still walks at the right cadence.
+func _footsteps(delta: float) -> void:
+	if velocity.length() < 0.3:
+		_step_t = 0.0
+		return
+	_step_t -= delta
+	if _step_t > 0.0:
+		return
+	var period := STEP_RUN if running else STEP_WALK
+	# Scale the cadence by how fast the body is actually going: the same code then works when
+	# something else is moving the knight.
+	_step_t = period * clampf(SPEED / maxf(velocity.length(), 0.1), 0.6, 1.6)
+	var clip := "foot_run" if running else "foot_" + surface
+	var threat := NOISE_RUN if running else NOISE_STEP
+	Sound.play(clip, global_position, threat, randf_range(0.94, 1.06))
 
 
 func swing() -> bool:
@@ -153,6 +198,21 @@ func swing_active() -> bool:
 	return _swing_t > 0.0
 
 
+## Throw a stone. The player's only way to make a noise SOMEWHERE ELSE, and therefore the only
+## answer to being heard: it converts "they know roughly where I am" into "they know exactly
+## where I am not".
+##
+## Returns false when there is nothing left to throw — the count is deliberately small, because
+## an unlimited distraction is not a decision.
+func throw_stone() -> bool:
+	if not alive or stones <= 0:
+		return false
+	stones -= 1
+	threw.emit(global_position + Vector3(0, 1.1, 0), facing)
+	Sound.play("stone_throw", global_position, 0.0)
+	return true
+
+
 func already_hit(id: int) -> bool:
 	return id in _swing_hits
 
@@ -165,8 +225,10 @@ func take_damage(amount: int) -> void:
 	if not alive:
 		return
 	hp = maxi(0, hp - amount)
+	Sound.play("player_hurt", global_position, NOISE_HURT)
 	if hp == 0:
 		alive = false
+		Sound.play("enemy_die", global_position, 10.0)
 		died.emit()
 
 

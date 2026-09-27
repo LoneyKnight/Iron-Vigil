@@ -40,6 +40,9 @@ func interact(run) -> void:
 	if taken:
 		return
 	taken = true
+	# Rummaging a chest is loud — louder than a footstep, quieter than a door — so searching
+	# near something that is listening is a risk the player takes knowingly.
+	Sound.play("chest_open", global_position, 4.0)
 	run.collect(loot, global_position)
 	var tw := create_tween()
 	tw.tween_property(_lid, "rotation:x", -1.1, 0.22)

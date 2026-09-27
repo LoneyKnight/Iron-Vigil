@@ -255,7 +255,69 @@ func _go() -> void:
 			await _frames(2)
 		_check(cultist.hp < hp0, "a swing damages a cultist (%d -> %d)" % [hp0, cultist.hp])
 
-	# --- 6. restart --------------------------------------------------------------------
+	# --- 6. sound, and the rule that makes it a resource ---------------------------------
+	#
+	# The whole design claim is "a noise you make pulls the opposition toward where you made
+	# it". That is testable, and if it silently stops being true the game becomes a stealth
+	# game with decorative audio. So the claim is asserted rather than assumed.
+	print("\n--- sound and hearing ---")
+	var target_cultist = null
+	for e in run._enemies:
+		if is_instance_valid(e) and e.alive:
+			target_cultist = e
+			break
+	_check(target_cultist != null, "a cultist exists to hear things")
+	if target_cultist != null:
+		# Put the knight far away first. Sight beats hearing by design, so a hearing test run
+		# with the player standing next to the subject measures chase behaviour instead — the
+		# first version of this test failed exactly that way and looked like a hearing bug.
+		run.knight.position = Vector3(500, 0, 500)
+		await _frames(4)
+		var home: Vector3 = target_cultist.global_position
+
+		# A quiet noise nearby does NOT pull it: a footstep is not an alarm.
+		Sound.noise_made.emit(home + Vector3(1.2, 0, 0), 1.5, "foot_stone")
+		await _frames(2)
+		_check(int(target_cultist.state) == 0,
+			"a footstep 1.2 m away does not wake a wandering cultist (state=%d)"
+			% target_cultist.state)
+
+		# A loud noise far away DOES pull it, and toward the noise rather than toward the
+		# player: that distinction is the entire point of the system.
+		var far := home + Vector3(9.0, 0, 0)
+		Sound.noise_made.emit(far, 12.0, "door_slam")
+		await _frames(2)
+		_check(int(target_cultist.state) != 0,
+			"a door slam 9 m away pulls the cultist (state=%d)" % target_cultist.state)
+		if int(target_cultist.state) != 0:
+			var before: float = target_cultist.global_position.distance_to(far)
+			for i in 60:
+				await get_tree().physics_frame
+			var after: float = target_cultist.global_position.distance_to(far)
+			_check(after < before - 0.3,
+				"the cultist walks toward the noise (%.1f m -> %.1f m)" % [before, after])
+
+		# Earshot scales with the noise. A whisper on the far side of the building must not
+		# summon anything, or loudness stops meaning anything.
+		target_cultist.state = 0
+		Sound.noise_made.emit(home + Vector3(60.0, 0, 0), 1.5, "foot_stone")
+		await _frames(2)
+		_check(int(target_cultist.state) == 0,
+			"a quiet noise 60 m away is not heard (state=%d)" % target_cultist.state)
+		# Put the player back where the rest of the test expects him.
+		run.knight.position = run.house.rooms[run.house.entrance].centre()
+		await _frames(4)
+
+	# The player's answer to being heard.
+	var stones_before: int = run.knight.stones
+	_check(stones_before > 0, "the knight starts with stones to throw (%d)" % stones_before)
+	_check(run.knight.throw_stone(), "a stone can be thrown")
+	_check(run.knight.stones == stones_before - 1,
+		"throwing spends a stone (%d -> %d)" % [stones_before, run.knight.stones])
+	await _frames(4)
+	_save(prefix + "_throw")
+
+	# --- 7. restart --------------------------------------------------------------------
 	print("\n--- restart ---")
 	var rooms_before: int = run.house.rooms.size()
 	var visited_before: int = run.visited.size()
@@ -265,6 +327,7 @@ func _go() -> void:
 	_check(not run.over, "a restart clears the ended state")
 	_check(run.visited.size() < maxi(visited_before, 2) + 1, "a restart clears the visit list")
 	_check(not run._lbl_end.visible, "a restart hides the end screen")
+	_check(run.knight.stones == 3, "a restart refills the stones (%d)" % run.knight.stones)
 	_save(prefix + "_restart")
 
 	_finish()

@@ -16,6 +16,19 @@ run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
+[audio]
+
+; Master -> Music / Ambience / SFX, with SFX_Muffled as a low-passed side path for anything
+; with a wall between it and the listener. Copied from the previous project, where this layout
+; was tuned against real recordings; the bus names are referenced by scripts/autoload/sound.gd.
+buses/default_bus_layout="res://default_bus_layout.tres"
+
+[autoload]
+
+; Sound owns both halves of a noise: playing it, and telling everything that can hear it that
+; it happened. Kept as an autoload because a footstep is not owned by any one actor.
+Sound="*res://scripts/autoload/sound.gd"
+
 [display]
 
 window/size/viewport_width=1920

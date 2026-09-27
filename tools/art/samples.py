@@ -66,10 +66,60 @@ PROP_RULES = (
     "space, no text, no labels, no watermark, no drop shadow."
 )
 
+# Props carry their own tail instead of gen.PIXEL_SUFFIX: that suffix asks for a "32x32 pixel
+# grid", which is right for a 128 px figure and wrong for a 179 px door (the prop would come
+# back as 1/6 the detail it has room for). Their samples therefore set "suffix": "" and this
+# text is appended to the prompt itself, where it is visible in one place.
+#
+# The framing sentence is load-bearing, not decoration: props.py anchors a prop by its base,
+# so an object cropped by the canvas edge is not "close enough" — it floats. The last two
+# clauses (proportion, magenta everywhere else) are what make the resource measurable rather
+# than merely pretty.
+PROP_SUFFIX = (
+    " Framing: exactly ONE object on the whole canvas, drawn large, filling most of the "
+    "canvas height, its base resting on the bottom edge of the canvas, the entire object "
+    "inside the frame with nothing cropped by any edge. No second object, no scenery, "
+    "no ground line, no floor, no wall behind it, no pedestal, no cast shadow. "
+    "The silhouette keeps the proportions stated above. Plain solid flat magenta background "
+    "(#FF00FF) filling every other pixel, no text, no labels, no watermark, no border. "
+)
+CHUNKY = (
+    " This object is displayed barely 30-60 pixels tall, so draw it with very few, large "
+    "shapes: at most a dozen blocks of colour, no small details, no thin lines, no ornament "
+    "finer than a quarter of the object's height."
+)
+
+# The game camera is a perspective Camera3D at -36 degrees (style_spec.md §1), so a prop is
+# drawn at that same slightly-elevated three-quarter angle. §6.2: the model keeps a few
+# degrees of its own pitch whatever the prompt says, so the angle is requested for family
+# resemblance and the actual framing is decided in code.
+PROP_VIEW = " Seen from a slightly elevated three-quarter top-down angle, facing down-screen."
+
+
+def prop(subject: str, proportion: str, *, note: str = "", chunky: bool = False) -> dict:
+    """One batch-1 prop sample.
+
+    ``proportion`` states the silhouette's width-to-height ratio, derived in props.py from
+    the authored screen size (world metres x 85 across, x 68.8 up). Without it the model
+    hands back a squat object that cannot reach its authorised screen height, and the
+    deviation table in props.py is what catches that.
+    """
+    return {
+        "prompt": WORLD + subject + PROP_VIEW + " " + proportion + PROP_RULES + PROP_SUFFIX
+        + (CHUNKY if chunky else ""),
+        "note": note,
+        "suffix": "",  # the tail lives in the prompt: see PROP_SUFFIX
+    }
+
 # Tiles are their own problem and need their own rules. Asking for a "tile" gets a
 # model to paint a little isometric diorama of a floor with candles on it: models have
 # seen far more decorative tilesets than seamless ground textures. Say PATTERN, say the
 # camera is straight down, and forbid everything that makes it scenery.
+#
+# style_spec.md §6.1: even with that wording the model only *usually* returns a flat
+# surface, and it never guarantees that the pattern wraps. Tiles are therefore generated
+# procedurally (tools/art/tiles.py) and shipped from there; the TILE samples below are kept
+# as the comparison baseline that the seam check is measured against. Do not ship them.
 TILE_RULES = (
     " A FLAT repeating SURFACE PATTERN, viewed from directly overhead, perfectly "
     "orthographic, camera pointing straight down. The pattern covers the ENTIRE canvas "
@@ -286,6 +336,151 @@ SAMPLES: dict[str, dict] = {
         "prompt": WORLD + CLOISTER_SUBJECT + ANGLE_HD2D + SCENE_RULES,
         "note": "OPTION C: HD-2D walk-in view — the Octopath fantasy, 3D scene required",
     },
+
+    # ==================================================================================
+    # BATCH 1 — interactive props, decor, ground (task-3).
+    #
+    # Every entry here is one object on the magenta key, and its proportion clause is not
+    # taste: props.py derives the AUTHORISED screen size of each one from the locked camera
+    # maths (85 px per metre across, 85*cos(36) = 68.8 px per metre up) and reports the
+    # measured deviation. A proportion that disagrees with that table fails the build.
+    #
+    # Wording rules that cost real generations to learn, applied below:
+    #   * name a MATERIAL, never a place (§6.3) — "a forged iron floor stand", not
+    #     "a corner of the crypt". Any noun that names somewhere gets a composed scene back.
+    #   * the base is named explicitly. A prop whose feet are cropped by the canvas edge is
+    #     detected by props.py and fails the "whole object in frame" check.
+    #   * an opening that must be see-through (the arch, the doorway of the open door) is
+    #     asked for as "blank solid magenta": the key removes magenta anywhere in the frame,
+    #     so the hole comes back transparent instead of black.
+    # ==================================================================================
+    "door_closed": prop(
+        "A single closed medieval abbey gate: TWO tall dark oak leaves meeting in the middle, "
+        "each bound by iron bands, with a wrought-iron ring handle and a small iron keyhole "
+        "plate on one leaf, hung inside a weathered limestone arch surround with narrow carved "
+        "jambs. Both leaves are shut flush in the frame. A tall gate: the leaves are clearly "
+        "taller than they are wide.",
+        "The whole gate including its stone surround is about three quarters as wide as it is "
+        "tall - a tall gate, not a square one.",
+        note="door, closed: 1.6 x 2.6 m -> 136 x 179 px authorised",
+    ),
+    "door_open": prop(
+        "A single tall medieval abbey gate standing half open: TWO tall dark oak leaves bound "
+        "by iron bands, hung in a weathered limestone arch surround with narrow carved jambs. "
+        "One leaf has swung open toward the viewer and the doorway behind it is blank solid "
+        "magenta; the other leaf is still shut. The gate is clearly taller than it is wide.",
+        "The whole gate with its stone surround is about three quarters as wide as it is tall "
+        "- a tall gate, not a square one.",
+        note="door, open: same box, the open leaf has to read at 179 px",
+    ),
+    "chest_closed": prop(
+        "A single closed medieval iron-bound oak chest: a LONG LOW strongbox, clearly wider "
+        "than it is tall - a wide rectangular oak front, three black iron bands running over "
+        "a flat lid and down the front, a hasp and a round iron lock plate, standing on four "
+        "short iron feet. A long shallow box, not a cube.",
+        "The chest is about one and three quarter times as wide as it is tall.",
+        note="loot chest, closed: 1.0 x 0.7 m -> 85 x 48 px",
+        chunky=True,
+    ),
+    "chest_open": prop(
+        "A single medieval iron-bound oak chest with its lid raised open: a LONG LOW oak box "
+        "with three black iron bands, the wide flat lid leaning back at about forty-five "
+        "degrees on iron hinges, the inside dark and empty. The box itself is much wider than "
+        "it is tall - a long shallow box, not a cube.",
+        "Counting the raised lid, the chest is about one and a third times as wide as it is "
+        "tall.",
+        note="loot chest, open: body 0.7 m + raised lid 0.23 m -> 85 x 64 px",
+        chunky=True,
+    ),
+    "altar": prop(
+        "A single long low stone altar of a militant religious order: a WIDE FLAT rectangular "
+        "slab six feet long resting on two short solid block supports, a shallow channel cut "
+        "along the top of the slab, a small carved cross on the wide front face. Cold and "
+        "unlit: no candles, no flame. A long low table, not a cube.",
+        "The altar is more than twice as wide as it is tall.",
+        note="altar, unlit: 2.0 x 1.1 m -> 170 x 76 px",
+    ),
+    "altar_lit": prop(
+        "A single long low stone altar of a militant religious order: a WIDE FLAT rectangular "
+        "slab six feet long on two short solid block supports with a shallow channel cut along "
+        "the top, and a row of SHORT tallow candles burning along the slab - low stubs with "
+        "small flames, together no taller than a tenth of the altar's height, a little smoke. "
+        "A long low table, not a cube.",
+        "The altar is more than twice as wide as it is tall, the candles included.",
+        note="altar, lit: the interaction reward state, same 170 x 76 px box",
+    ),
+    "candle_rack": prop(
+        "A single black iron floor candle stand: a narrow stand on three small feet with a "
+        "slender vertical stem and a short horizontal bar carrying five burning tallow "
+        "candles, rusted dark iron, warm yellow flames.",
+        "The stand is about two fifths as wide as it is tall: a narrow stem on a wide "
+        "three-legged base, the base the widest part.",
+        note="the only portable light: 0.5 x 1.5 m -> 43 x 103 px",
+    ),
+    "pillar": prop(
+        "A single heavy Romanesque stone pillar: a round weathered limestone shaft with four "
+        "shallow vertical flutes, a carved cushion capital at the top and a plain moulded "
+        "base ring, standing on a small square stone footing.",
+        "The pillar is about one third as wide as it is tall.",
+        note="architecture: 0.9 x 3.1 m -> 77 x 213 px, the tallest prop in the batch",
+    ),
+    "banner": prop(
+        "A single torn heraldic war banner hanging from a short iron-tipped wooden crossbar: "
+        "a deep oxblood-red cloth bearing a weathered off-white cross, frayed and torn along "
+        "its lower edge, hanging straight down, the cloth a little narrower than the bar.",
+        "The banner is about two thirds as wide as it is tall.",
+        note="cheap identity, repeats everywhere: 1.1 x 2.2 m -> 94 x 151 px",
+    ),
+    "sigil": prop(
+        "A single square flagstone of worn grey limestone with a circular occult sigil carved "
+        "into it: a deep carved outer ring, an inverted cross inside the ring, radiating "
+        "notches around the ring and a few crude runes between them. Seen from directly "
+        "overhead, straight down, the flat stone filling the whole canvas.",
+        "The flagstone is square, as wide as it is tall.",
+        note="floor decal, lies flat: authored square 2.0 x 2.0 m -> 170 x 170 px",
+    ),
+
+    # --- decor: the cheapest identity in the game, and the smallest sprites -----------
+    "wall_sconce": prop(
+        "A single wrought-iron wall sconce: a scrolled iron back plate with a short arm "
+        "holding a shallow iron cup, and one dripping tallow candle burning in the cup, "
+        "rusted dark iron and a warm yellow flame.",
+        "The sconce is about half as wide as it is tall: a narrow back plate and arm with a "
+        "tall candle above them.",
+        note="wall decor: 0.28 x 0.55 m -> 24 x 38 px",
+        chunky=True,
+    ),
+    "wall_arch": prop(
+        "A single round-headed arch surround of carved weathered limestone: a semicircular "
+        "arch of voussoir stones on two short jambs with a plain moulded drip edge. The "
+        "opening under the arch is empty and blank solid magenta.",
+        "The arch surround is about as wide as it is tall.",
+        note="wall decor, the abbey's signature shape: 2.2 x 2.6 m -> 187 x 179 px",
+    ),
+    "rubble": prop(
+        "A single low heap of broken limestone rubble mixed with a few shattered grey roof "
+        "slates, angular chunks lying in a scattered pile.",
+        "The heap is about twice as wide as it is tall, low to the ground.",
+        note="floor decor: 0.7 x 0.4 m -> 60 x 28 px, the smallest sprite in the batch",
+        chunky=True,
+    ),
+    "chain": prop(
+        "A single hanging iron chain: a vertical run of heavy oval iron links hanging from a "
+        "bent iron ring at the top and ending in a broken link, deep rusted dark iron.",
+        "The chain is about a quarter as wide as it is tall: one narrow vertical run of "
+        "links, the bent ring at the top the widest part.",
+        note="hanging decor: 0.25 x 1.2 m -> 21 x 83 px",
+        chunky=True,
+    ),
+    "cobweb": prop(
+        "A single dusty grey spider web spun between a wall and a beam: chunky radial threads "
+        "and three concentric rings, torn on one side, a few darker strands caught in it. "
+        "Draw at most eight radial threads so the shape still reads when it is scaled down to "
+        "60 pixels.",
+        "The web is about four fifths as wide as it is tall.",
+        note="corner decor: 0.62 x 0.95 m -> 53 x 65 px",
+        chunky=True,
+    ),
 }
 
 
@@ -297,7 +492,16 @@ def list_samples() -> None:
 
 def generate_one(name: str, force: bool = False) -> Path:
     spec = SAMPLES[name]
-    img = gen.cached(name, spec["prompt"], out_size="1024x1024", force=force)
+    # A sample may pin its own tail ("suffix"), or opt out of gen's default with "".
+    # Batch-1 props do the latter: PIXEL_SUFFIX asks for a 32x32 pixel grid, which is the
+    # right budget for a 128 px figure and far too coarse for a 213 px pillar.
+    img = gen.cached(
+        name,
+        spec["prompt"],
+        out_size=spec.get("out_size", "1024x1024"),
+        suffix=spec.get("suffix"),
+        force=force,
+    )
     path = gen.RAW_DIR / f"{name}.png"
     print(f"{name:16s} {img.size[0]}x{img.size[1]}  {path}")
     return path

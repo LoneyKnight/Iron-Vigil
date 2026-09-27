@@ -31,6 +31,10 @@ class Room:
 	var chests := []            # Array[Dictionary]: {"at": Vector3, "loot": String, "taken": bool}
 	var enemy_spawn := []       # Array[Vector3]
 	var has_altar := false
+	## Floor material. Drives the tile texture AND the footstep clip, which is why it is one
+	## field rather than two: a room that looks like wood and sounds like stone is a bug the
+	## player notices without being able to name.
+	var theme := "stone"
 	func _init(c: Vector2i) -> void:
 		cell = c
 
@@ -117,6 +121,13 @@ func generate(room_count: int = 8, seed_value: int = 0) -> void:
 		if cultists < 3 and depth.get(cell, 0) >= 1 and not room.has_altar:
 			room.enemy_spawn.append(room.centre() + Vector3(1.2, 0.0, 1.0))
 			cultists += 1
+
+	# One floor material per room, chosen from the three the generator has footstep clips for.
+	# A material with no clip would be a silent floor, which is worse than a boring one.
+	var themes := ["stone", "stone", "wood", "cloth"]
+	for cell in order:
+		rooms[cell].theme = themes[rng.randi_range(0, themes.size() - 1)]
+	rooms[entrance].theme = "stone"
 
 
 ## Breadth-first depth from the entrance, used both for placement and for the connectivity

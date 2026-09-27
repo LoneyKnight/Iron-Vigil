@@ -37,9 +37,13 @@ func interact(run) -> void:
 	# Refuse out loud, and name what is missing. This is the entire tutorial for the win
 	# condition and it costs one line.
 	if not run.has_all_relics():
+		Sound.play("altar_refuse", global_position, 2.0)
 		run.say("圣物不全：还缺 %s" % run.missing_relics_text())
 		return
 	done = true
+	# The run's resolution, and it should be audible from anywhere in the building: the rite
+	# completing is the loudest and longest sound in the game, and it ends everything.
+	Sound.play("altar_lit", global_position, 14.0)
 	run.finish_rite(self)
 	var tw := create_tween()
 	tw.tween_property(_glow, "light_energy", 3.2, 0.7)

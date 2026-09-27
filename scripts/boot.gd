@@ -7,6 +7,9 @@ const INPUTS := {
 	"move_down": [KEY_S, KEY_DOWN],
 	"move_left": [KEY_A, KEY_LEFT],
 	"move_right": [KEY_D, KEY_RIGHT],
+	# Running is a decision, not a convenience: it nearly doubles the speed and more than
+	# quadruples the noise, which is the trade the whole sound system is built around.
+	"run": [KEY_SHIFT],
 }
 
 
