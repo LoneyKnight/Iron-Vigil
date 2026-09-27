@@ -1,8 +1,10 @@
 ; Engine configuration file.
-; Iron Vigil — medieval knight-cult co-op, short runs.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
 ;
-; Pixel-density decisions live here and are documented in tools/design/style_spec.md.
-; Read that file before changing any number in [display] or [rendering].
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -16,8 +18,6 @@ config/icon="res://icon.svg"
 
 [display]
 
-; Reference resolution. The whole art budget is expressed against this, so changing it
-; invalidates every "screen pixels per tile" number in the style spec.
 window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
@@ -25,24 +25,12 @@ window/stretch/aspect="expand"
 
 [physics]
 
-; Godot 4.6+ ships two 3D engines and the default changed; Jolt is the maintained one and
-; is what the previous project shipped on. Pinned here so a version bump cannot silently
-; move the whole game onto a different solver — character-body behaviour differs between
-; them, and "my collider stopped working" is not a bug worth rediscovering.
 3d/physics_engine="Jolt Physics"
 
 [rendering]
 
-; NEAREST for world art (0 = nearest). UI art opts into linear per-node.
 textures/canvas_textures/default_texture_filter=0
-; Non-negotiable for a pixel-art world: without both of these, moving furniture and
-; tiles land on fractional pixels and the whole screen shimmers. Black Room shipped
-; without them for its entire life; do not repeat that.
-2d/snap/snap_2d_transforms_to_pixel=true
-2d/snap/snap_2d_vertices_to_pixel=true
 rendering_device/driver.windows="d3d12"
 environment/defaults/default_clear_color=Color(0.02, 0.02, 0.03, 1)
-
-[internationalization]
-
-locale/fallback="en"
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true

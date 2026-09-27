@@ -1,6 +1,6 @@
 extends Node
-## Entry point. Registers the input map in code so the project has no hidden
-## project.godot input state to drift out of sync with the game.
+## Entry point. Registers the input map in code so the project has no hidden project.godot
+## input state to drift out of sync with the game.
 
 const INPUTS := {
 	"move_up": [KEY_W, KEY_UP],
@@ -17,8 +17,8 @@ func _ready() -> void:
 		push_error("boot: res://scenes/main.tscn failed to load")
 		return
 	add_child(scene.instantiate())
-	# Verification entry points. Kept here so the prototype and its test start from the
-	# same scene, exactly as the game does.
+	# Verification entry points. Kept here so the game and its tests start from the same scene
+	# and the same input map — a test that builds its own world tests its own world.
 	var args := OS.get_cmdline_user_args()
 	if "--diag" in args:
 		add_child(load("res://tests/diag.gd").new())
