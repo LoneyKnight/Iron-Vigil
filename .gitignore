@@ -1,0 +1,25 @@
+# Godot 4+
+.godot/
+/android/
+export_presets.cfg
+
+# Image API credentials. Never commit these; never print them.
+/tools/.env
+
+# Raw model output: large, regenerable, and only the pipeline reads it.
+# Cached generations make re-running the pixel pipeline free, so keep the folder
+# locally — it is just not source.
+/tools/art_raw/
+
+# Concept art and style experiments: review artefacts, not shipped assets.
+/tools/design/concepts/
+/tools/design/style_test/backup_*/
+
+# Generated translation binaries (compiled from locale/*.csv).
+/locale/*.translation
+
+__pycache__/
+*.pyc
+
+# Screenshots written by tests (keep the baseline folder, ignore the runs).
+/tests/shots/_*.png
