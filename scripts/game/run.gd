@@ -202,10 +202,10 @@ func collect(loot: String, at: Vector3) -> void:
 		# Two different sounds for two different sizes of event. Ordinary loot is a bright
 		# little chime; a relic is long and low and outlasts the player's movement, so the
 		# player can tell they picked up the thing that matters without reading a line.
-		Sound.play("relic_pickup", at, 8.0)
+		Sound.play("relic_pickup", at, 8.0, 1.0, 0.0, knight)
 		_toast("获得圣物：%s（%d/%d）" % [RELIC_NAMES.get(loot, loot), relics.size(), RELICS.size()], 4.0)
 	else:
-		Sound.play("pickup", at, 2.0)
+		Sound.play("pickup", at, 2.0, 1.0, 0.0, knight)
 		_toast("获得 %s" % LOOT_NAMES.get(loot, loot), 2.0)
 
 
@@ -268,7 +268,14 @@ func _on_knight_hurt(hp: int) -> void:
 ##
 ## There is no line-of-sight test here on purpose. Sound goes around corners and through
 ## walls; that is precisely why it is useful and precisely why it is dangerous.
-func _on_noise(at: Vector3, threat: float, kind: String) -> void:
+##
+## `source` is what keeps the opposition from alerting itself. A cultist's idle chant goes
+## through the same mixer — the player must hear it from the next room — but an enemy noise
+## must not wake another enemy, or one chant cascades through the whole building and the
+## player's own noise stops being the thing that matters. Only the player has ears here.
+func _on_noise(at: Vector3, threat: float, kind: String, source: Node = null) -> void:
+	if source != null and source != knight:
+		return
 	var earshot := threat * HEAR_PER_THREAT
 	for e in _enemies:
 		if not is_instance_valid(e) or not e.alive:
@@ -317,7 +324,7 @@ func _on_stone_thrown(from: Vector3, toward: Vector3) -> void:
 	mesh.global_position = landed
 	# The landing is what matters: it is the loudest thing the player can arrange to happen
 	# somewhere they are not.
-	Sound.play("stone_impact", landed, Knight.NOISE_STONE_LAND)
+	Sound.play("stone_impact", landed, Knight.NOISE_STONE_LAND, 1.0, 0.0, knight)
 	_toast("石头落地 · 动静传得很远", 1.6)
 	var tw := create_tween()
 	tw.tween_property(mesh, "scale", Vector3(0.01, 0.01, 0.01), 0.6)
@@ -358,7 +365,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT and not over:
 		if knight.swing():
-			Sound.play("swing", knight.global_position, Knight.NOISE_SWING)
+			Sound.play("swing", knight.global_position, Knight.NOISE_SWING, 1.0, 0.0, knight)
 
 
 func _physics_process(_delta: float) -> void:

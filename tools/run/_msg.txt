@@ -1,0 +1,36 @@
+art(batch 1) + wiring: real doors, chests, altars, stone floors; sound hears itself correctly
+
+Art (by art-batch, task-3): 18 assets under assets/props, assets/decor and assets/tiles, plus a
+contact sheet and report in tools/design/concepts/. Every asset is inside +-15% of its
+authorised pixel height, magenta residue 0, empty frames 0.
+
+Engine wiring (this commit)
+- room_builder loads assets/tiles/floor_<theme>.png and wall_stone.png when present, and falls
+  back to the procedural textures when they are not. The fallback stays permanently: it keeps
+  the project runnable while art is being generated, and a missing file degrades the look
+  rather than breaking the run.
+- prop_util.sprite() and contact_shadow(): props draw as sprites when art exists and as the
+  original boxes when it does not. Door, chest and altar each got both paths, and the lit altar
+  and open chest swap in a second sprite rather than rotating a drawing -- a lid rotating on a
+  painted chest tears, because the art is a drawing of a chest and not a rig.
+- prop_util.sprite() takes an optional width_m. Height-locked scaling is wrong for a door: the
+  drawing is 1.60 x 2.28 m while the opening is 1.60 x 2.60 m, so scaling by height would push
+  it 11 cm into the wall on each side and the doorway would read as walled up. Width-locked, the
+  door is 2.29 m in a 2.6 m opening, which is just a door with a frame above it.
+
+Sound correctness -- both found by the hearing assertions, not by listening
+- The opposition was alerting itself. A cultist's idle chant went through the same noise_made
+  signal as a player action, so a single chant cascaded through the building and the player's
+  own noise stopped being the thing that mattered. Sound.play() now takes a `source`, and only
+  the player has ears.
+- tests/shot.gd's hearing assertions were measuring the wrong thing twice. The check that a
+  quiet noise does not wake a cultist was passing against a subject left mid-investigation by
+  the door and chest noises earlier in the same run -- a false green, which is worse than a
+  failure. And a noise dropped 1.2 m away was heard and instantly forgotten, because the
+  cultist was already inside INVESTIGATE_ARRIVE and treated it as reached. Both comments now
+  record the geometry, and the test asserts the boundary from both sides: heard at 2.0 m with a
+  2.55 m earshot, not heard at 4.5 m.
+
+Also: tools/run/kill-godot.ps1. The console wrapper exits while the GUI child keeps running, so
+interrupted runs leave processes behind; six had accumulated, and one of them was probably why a
+run came back exit 1 with no output at all.

@@ -57,7 +57,7 @@ func hear_noise(at: Vector3, threat: float) -> void:
 	_investigate_t = INVESTIGATE_GIVE_UP * clampf(0.6 + threat / 14.0, 0.6, 1.6)
 	if state != State.INVESTIGATE:
 		state = State.INVESTIGATE
-		Sound.play("cultist_alert", global_position, 0.0)
+		Sound.play("cultist_alert", global_position, 0.0, 1.0, 0.0, self)
 
 
 func _ready() -> void:
@@ -104,7 +104,7 @@ func _physics_process(delta: float) -> void:
 	var seen := _visible_target()
 	if seen != null:
 		if state != State.CHASE:
-			Sound.play("cultist_alert", global_position, 0.0)
+			Sound.play("cultist_alert", global_position, 0.0, 1.0, 0.0, self)
 		state = State.CHASE
 		_investigate_at = seen.global_position
 		_investigate_t = INVESTIGATE_GIVE_UP
@@ -133,7 +133,7 @@ func _physics_process(delta: float) -> void:
 	# see it. It is the reason the world feels inhabited rather than populated.
 	if _chant_cd <= 0.0:
 		_chant_cd = randf_range(6.0, 14.0)
-		Sound.play("cultist_chant", global_position, 0.0, randf_range(0.94, 1.06))
+		Sound.play("cultist_chant", global_position, 0.0, randf_range(0.94, 1.06), 0.0, self)
 
 	_wander_t -= delta
 	if _wander_t <= 0.0 or global_position.distance_to(_wander_to) < 0.4:
@@ -194,7 +194,7 @@ func take_damage(amount: int) -> void:
 	if not alive:
 		return
 	hp = maxi(0, hp - amount)
-	Sound.play("hit_flesh", global_position, 6.0)
+	Sound.play("hit_flesh", global_position, 6.0, 1.0, 0.0, self)
 	# Being hit is loud, and it pulls the cultist straight onto whoever hit it: violence is the
 	# noisiest thing in the game, so it is always a trade rather than a free option.
 	_investigate_at = global_position
@@ -206,5 +206,5 @@ func take_damage(amount: int) -> void:
 	tw.tween_property(_sprite, "modulate", Color(1, 1, 1), 0.18)
 	if hp == 0:
 		alive = false
-		Sound.play("cultist_die", global_position, 10.0)
+		Sound.play("cultist_die", global_position, 10.0, 1.0, 0.0, self)
 		tw.finished.connect(queue_free)

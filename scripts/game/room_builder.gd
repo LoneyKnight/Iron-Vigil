@@ -24,13 +24,12 @@ const STONE_DARK := Color("4a4741")
 const IRON := Color("3a3a3e")
 
 var house: House
-var _floor_mat: StandardMaterial3D
+var _floor_mats := {}          # theme -> material, so one material is not rebuilt per room
 var _wall_mat: StandardMaterial3D
 
 
 func build(p_house: House) -> void:
 	house = p_house
-	_floor_mat = _make_floor_material()
 	_wall_mat = _make_wall_material()
 	for cell in house.rooms:
 		_build_room(house.rooms[cell])
@@ -40,7 +39,46 @@ func build(p_house: House) -> void:
 # materials: procedural, because a floor repeats hundreds of times and must be quiet
 # ---------------------------------------------------------------------------------------
 
-func _make_floor_material() -> StandardMaterial3D:
+func _make_floor_material(theme: String) -> StandardMaterial3D:
+	# Prefer a real tile if one exists for this floor material, fall back to the procedural
+	# one otherwise. The fallback is not a stopgap to be removed later: it keeps the game
+	# runnable while art is being generated, and it keeps a missing file from being a crash.
+	var asset := "res://assets/tiles/floor_%s.png" % theme
+	if not ResourceLoader.exists(asset):
+		asset = "res://assets/tiles/floor_stone.png"
+	var m := StandardMaterial3D.new()
+	if ResourceLoader.exists(asset):
+		m.albedo_texture = load(asset)
+		# The tile is authored at 64 texels for 1 metre (tools/art/tiles.py). One UV repeat
+		# per metre is therefore the whole scale relationship, and it is the reason the
+		# density in style_spec.md §1 comes out right: 85 px per metre on screen.
+		m.uv1_scale = Vector3(House.ROOM_M, House.ROOM_M, 1.0)
+	else:
+		m.albedo_texture = _procedural_floor()
+		m.uv1_scale = Vector3(House.ROOM_M / 3.0, House.ROOM_M / 3.0, 1.0)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	m.roughness = 0.95
+	return m
+
+
+func _make_wall_material() -> StandardMaterial3D:
+	var asset := "res://assets/tiles/wall_stone.png"
+	var m := StandardMaterial3D.new()
+	if ResourceLoader.exists(asset):
+		m.albedo_texture = load(asset)
+		# 64 texels for 1 metre of wall face, same relationship as the floor.
+		m.uv1_scale = Vector3(1.0, WALL_HEIGHT, 1.0)
+	else:
+		m.albedo_texture = _procedural_wall()
+		m.uv1_scale = Vector3(1.0, WALL_HEIGHT / 2.0, 1.0)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	m.roughness = 0.9
+	return m
+
+
+## Procedural fallback: 3x3 tiles with the mortar seam on the tile border, so a 3x3
+## arrangement reproduces seamlessly and one texture covers three metres.
+func _procedural_floor() -> ImageTexture:
 	var t := TILE_PX
 	var size := t * 3
 	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
@@ -48,8 +86,6 @@ func _make_floor_material() -> StandardMaterial3D:
 		for x in size:
 			var tx := x % t
 			var ty := y % t
-			# Cheap deterministic wobble so slabs are not identical, plus a mortar seam on
-			# the tile border so the 3x3 pre-tiling lines up when repeated.
 			var n := float((x * 7 + y * 13 + (x / 8) * 5) % 9) / 9.0
 			if tx == 0 or ty == 0:
 				img.set_pixel(x, y, STONE_DARK.darkened(0.10 + n * 0.06))
@@ -58,15 +94,10 @@ func _make_floor_material() -> StandardMaterial3D:
 				if tx == t / 2 and ty > t / 2:
 					v = v.darkened(0.16)
 				img.set_pixel(x, y, v)
-	var m := StandardMaterial3D.new()
-	m.albedo_texture = ImageTexture.create_from_image(img)
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
-	m.uv1_scale = Vector3(House.ROOM_M / 3.0, House.ROOM_M / 3.0, 1.0)
-	m.roughness = 0.95
-	return m
+	return ImageTexture.create_from_image(img)
 
 
-func _make_wall_material() -> StandardMaterial3D:
+func _procedural_wall() -> ImageTexture:
 	var course := HALF_TILE_PX
 	var w := course * 2
 	var h := course * 2
@@ -79,12 +110,7 @@ func _make_wall_material() -> StandardMaterial3D:
 			var n := float((x * 11 + y * 5 + row * 3) % 7) / 7.0
 			var base := STONE.darkened(0.18)
 			img.set_pixel(x, y, IRON.lerp(base, 0.62) if in_joint else base.darkened(n * 0.08))
-	var m := StandardMaterial3D.new()
-	m.albedo_texture = ImageTexture.create_from_image(img)
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
-	m.uv1_scale = Vector3(1.0, WALL_HEIGHT / 2.0, 1.0)
-	m.roughness = 0.9
-	return m
+	return ImageTexture.create_from_image(img)
 
 
 # ---------------------------------------------------------------------------------------
@@ -94,7 +120,9 @@ func _make_wall_material() -> StandardMaterial3D:
 func _build_room(room: House.Room) -> void:
 	var span := House.ROOM_M
 	var c := room.centre()
-	_slab(Vector3(span, 0.2, span), c + Vector3(0, -0.1, 0), _floor_mat)
+	if not _floor_mats.has(room.theme):
+		_floor_mats[room.theme] = _make_floor_material(room.theme)
+	_slab(Vector3(span, 0.2, span), c + Vector3(0, -0.1, 0), _floor_mats[room.theme])
 
 	var half := span * 0.5
 	for dir in 4:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dog87a4uqj4q"
-path="res://.godot/imported/wall_stone.png-eca4b7880eebc6f9e6dfd2864b456795.ctex"
+uid="uid://0nhsct8dqm3i"
+path="res://.godot/imported/chest_open.png-a89ec2838a7fe5ec3d3f1018e7a6c6b1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tiles/wall_stone.png"
-dest_files=["res://.godot/imported/wall_stone.png-eca4b7880eebc6f9e6dfd2864b456795.ctex"]
+source_file="res://assets/props/chest_open.png"
+dest_files=["res://.godot/imported/chest_open.png-a89ec2838a7fe5ec3d3f1018e7a6c6b1.ctex"]
 
 [params]
 

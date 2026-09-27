@@ -235,7 +235,11 @@ def batch1_sheet() -> int:
             for x in range(cx + 6, cx + CELL - 6, 6):
                 dr.line([(x, gy), (x + 3, gy)], fill=GUIDE, width=1)
             sheet.paste(img, (cx + 8, base - img.height), img)
-            zoom = max(1, min(4, (CELL - 70) // max(1, img.height)))
+            zoom = 1
+            avail_w = CELL - img.width - 26
+            if avail_w >= img.width and img.height < CELL - 70:
+                zoom = max(1, min(4, avail_w // max(1, img.width),
+                                  (CELL - 70) // max(1, img.height)))
             if zoom > 1:
                 big = img.resize((img.width * zoom, img.height * zoom), Image.NEAREST)
                 sheet.paste(big, (cx + 16 + img.width, base - big.height), big)

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dog87a4uqj4q"
-path="res://.godot/imported/wall_stone.png-eca4b7880eebc6f9e6dfd2864b456795.ctex"
+uid="uid://fu4bo6l7lgco"
+path="res://.godot/imported/chain.png-c82fe0c4e9058df8c71ccfb512642256.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tiles/wall_stone.png"
-dest_files=["res://.godot/imported/wall_stone.png-eca4b7880eebc6f9e6dfd2864b456795.ctex"]
+source_file="res://assets/decor/chain.png"
+dest_files=["res://.godot/imported/chain.png-c82fe0c4e9058df8c71ccfb512642256.ctex"]
 
 [params]
 

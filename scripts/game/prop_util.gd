@@ -70,3 +70,55 @@ static func glow(parent: Node3D, at: Vector3, energy: float, radius: float) -> O
 	l.shadow_enabled = false
 	parent.add_child(l)
 	return l
+
+
+## A standing prop sprite, anchored by its feet at `at`.
+##
+## Scaling is by HEIGHT by default, and that is wrong for anything whose width is the thing
+## that must match the world — a door, for instance, whose art is 2.28 m tall by 1.60 m wide
+## while its opening is 2.6 m by 1.6 m. Scaling that by height would make it 1.82 m wide and
+## overlap the wall on both sides. `width_m` selects width-locked scaling instead; the height
+## then follows from the art's aspect and is allowed to differ from the opening, because a
+## 2.29 m door in a 2.6 m opening is simply a door with a frame above it.
+##
+## Returns null when the asset is not there, and every caller treats that as "build the box
+## version instead". That is deliberate and permanent: it keeps the game runnable while art is
+## being generated, and it means a missing file degrades the look rather than breaking the run.
+static func sprite(parent: Node3D, asset: String, at: Vector3, world_h: float,
+		width_m: float = 0.0) -> Sprite3D:
+	if not ResourceLoader.exists(asset):
+		return null
+	var tex: Texture2D = load(asset)
+	if tex == null:
+		return null
+	var s := Sprite3D.new()
+	s.texture = tex
+	if width_m > 0.0:
+		s.pixel_size = width_m / float(maxi(1, tex.get_width()))
+	else:
+		s.pixel_size = world_h / float(maxi(1, tex.get_height()))
+	# Positive offset moves the sprite UP; half the drawn height puts its bottom edge on the
+	# floor. Computed from the texture, so it is right under either scaling rule.
+	s.offset = Vector2(0.0, float(tex.get_height()) * 0.5)
+	s.position = at
+	s.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	s.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	s.shaded = true
+	parent.add_child(s)
+	return s
+
+
+## A contact shadow: a flat quad on the ground, so the prop reads as standing ON the floor
+## instead of floating over it.
+static func contact_shadow(parent: Node3D, at: Vector3, radius: float,
+		alpha: float = 0.4) -> Sprite3D:
+	var s := Sprite3D.new()
+	s.texture = load("res://scripts/game/shadow_tex.gd").make()
+	s.pixel_size = radius / 32.0
+	s.position = Vector3(at.x, 0.02, at.z)
+	s.rotation_degrees = Vector3(-90, 0, 0)
+	s.modulate = Color(0, 0, 0, alpha)
+	s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	parent.add_child(s)
+	return s

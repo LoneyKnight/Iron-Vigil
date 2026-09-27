@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dog87a4uqj4q"
-path="res://.godot/imported/wall_stone.png-eca4b7880eebc6f9e6dfd2864b456795.ctex"
+uid="uid://s4co0i8i0qaq"
+path="res://.godot/imported/altar_lit.png-5e278b9d83df8c0544ff8ea0ff89efd5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tiles/wall_stone.png"
-dest_files=["res://.godot/imported/wall_stone.png-eca4b7880eebc6f9e6dfd2864b456795.ctex"]
+source_file="res://assets/props/altar_lit.png"
+dest_files=["res://.godot/imported/altar_lit.png-5e278b9d83df8c0544ff8ea0ff89efd5.ctex"]
 
 [params]
 

@@ -193,14 +193,17 @@ def floor_stone() -> Image.Image:
 def floor_blood() -> Image.Image:
     """The same paving with a dried stain creeping along the joints.
 
+    Two blobs, not three, and a lighter blend than the first pass used: the tile repeats once
+    per metre, so a strong motif turns into visible wallpaper exactly the way a loud floor
+    pattern does. The stain is legible on one tile and quiet on twenty.
+
     The stain is built from ring-wrapped distances, so it crosses the tile edge and comes
     back without a seam — the difference between "a stain on a floor" and "a stain per tile".
     """
     base = np.asarray(floor_stone(), np.float32)
     xs, ys = np.arange(SIZE, dtype=np.float32), np.arange(SIZE, dtype=np.float32)
     stain = np.zeros((SIZE, SIZE), np.float32)
-    for cx, cy, radius, weight in ((32.0, 8.0, 15.0, 1.0), (4.0, 46.0, 11.0, 0.8),
-                                   (48.0, 52.0, 9.0, 0.6)):
+    for cx, cy, radius, weight in ((30.0, 6.0, 13.0, 1.0), (2.0, 44.0, 9.0, 0.7)):
         dx = _wrap_distance(xs, cx)[None, :]
         dy = _wrap_distance(ys, cy)[:, None]
         r = np.sqrt(dx ** 2 + dy ** 2)
@@ -209,7 +212,7 @@ def floor_blood() -> Image.Image:
     # The joints are the dark pixels — their channel sum sits near the mortar token.
     in_joint = base.sum(axis=2) <= MORTAR.sum() + 14
     stain = np.clip(stain + in_joint * stain * 0.5, 0.0, 1.0)
-    blend = (stain * 0.7)[:, :, None]
+    blend = (stain * 0.55)[:, :, None]
     rgb = base * (1.0 - blend) + OXBLOOD[None, None, :] * blend
     rgb = rgb + _value_noise(6, seed=29)[:, :, None] * 2.0
     return _to_image(_snap(rgb, BLOOD_PALETTE))

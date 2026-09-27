@@ -415,14 +415,14 @@ SAMPLES: dict[str, dict] = {
         "candles, rusted dark iron, warm yellow flames.",
         "The stand is about two fifths as wide as it is tall: a narrow stem on a wide "
         "three-legged base, the base the widest part.",
-        note="the only portable light: 0.5 x 1.5 m -> 43 x 103 px",
+        note="the only portable light: 0.5 x 1.5 m -> 42 x 103 px",
     ),
     "pillar": prop(
         "A single heavy Romanesque stone pillar: a round weathered limestone shaft with four "
         "shallow vertical flutes, a carved cushion capital at the top and a plain moulded "
         "base ring, standing on a small square stone footing.",
         "The pillar is about one third as wide as it is tall.",
-        note="architecture: 0.9 x 3.1 m -> 77 x 213 px, the tallest prop in the batch",
+        note="architecture: 0.9 x 3.1 m -> 76 x 213 px, the tallest prop in the batch",
     ),
     "banner": prop(
         "A single torn heraldic war banner hanging from a short iron-tipped wooden crossbar: "
@@ -455,13 +455,14 @@ SAMPLES: dict[str, dict] = {
         "arch of voussoir stones on two short jambs with a plain moulded drip edge. The "
         "opening under the arch is empty and blank solid magenta.",
         "The arch surround is about as wide as it is tall.",
-        note="wall decor, the abbey's signature shape: 2.2 x 2.6 m -> 187 x 179 px",
+        note="wall decor, the abbey's signature shape: 2.0 x 2.6 m -> 170 x 179 px",
     ),
     "rubble": prop(
-        "A single low heap of broken limestone rubble mixed with a few shattered grey roof "
-        "slates, angular chunks lying in a scattered pile.",
+        "A single low heap of broken grey limestone rubble mixed with a few shattered grey "
+        "roof slates, angular chunks lying in a scattered pile. Grey stone only: no red, no "
+        "terracotta, no rust, no moss, no plants, no bones.",
         "The heap is about twice as wide as it is tall, low to the ground.",
-        note="floor decor: 0.7 x 0.4 m -> 60 x 28 px, the smallest sprite in the batch",
+        note="floor decor: 0.7 x 0.4 m -> 59 x 28 px, the smallest sprite in the batch",
         chunky=True,
     ),
     "chain": prop(
@@ -473,12 +474,13 @@ SAMPLES: dict[str, dict] = {
         chunky=True,
     ),
     "cobweb": prop(
-        "A single dusty grey spider web spun between a wall and a beam: chunky radial threads "
-        "and three concentric rings, torn on one side, a few darker strands caught in it. "
-        "Draw at most eight radial threads so the shape still reads when it is scaled down to "
-        "60 pixels.",
-        "The web is about four fifths as wide as it is tall.",
-        note="corner decor: 0.62 x 0.95 m -> 53 x 65 px",
+        "A single dusty grey spider web: chunky radial threads and three concentric rings spun "
+        "between two flat surfaces, torn on one side, a few darker strands caught in it. ONLY "
+        "the web itself: no window, no arch, no frame, no stonework, no wall, no corner, no "
+        "cross, no glass, no architecture of any kind behind it. Draw at most eight radial "
+        "threads so the shape still reads when it is scaled down to 60 pixels.",
+        "The web is a little wider than it is tall.",
+        note="corner decor: 0.62 x 0.65 m -> 53 x 45 px",
         chunky=True,
     ),
 }

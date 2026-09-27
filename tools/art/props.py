@@ -126,8 +126,8 @@ SPECS: dict[str, dict] = {
                "note": "broken stone heap"},
     "chain": {"group": "decor", "plane": "wall", "world": (0.25, 1.2),
               "note": "hanging iron chain, widest = the ring at the top"},
-    "cobweb": {"group": "decor", "plane": "wall", "world": (0.62, 0.95),
-               "note": "corner cobweb, taller than wide as drawn"},
+    "cobweb": {"group": "decor", "plane": "wall", "world": (0.62, 0.65),
+               "note": "corner cobweb, near square on the wall, wider than tall on screen"},
 }
 
 
@@ -291,16 +291,25 @@ def quantise(img: Image.Image, colours: int = COLOURS) -> Image.Image:
 
 
 def clamp_tokens(img: Image.Image) -> Image.Image:
-    """Hold the §4 value tokens: highlights never reach 255, shadow never below 8."""
+    """Hold the §4 value tokens: highlights never reach 255, shadow never below 8.
+
+    The dark end is a lift, not a clip: anything below the floor is scaled up so it keeps its
+    hue. Pure black has no hue to scale, and the first version of this left it black (measured
+    on disk: darkest luma 0 in 11 of 15 sprites) — so a luma-0 pixel is set to the floor
+    directly, and the target is the floor + 1 so uint8 rounding cannot land below it.
+    """
     a = np.asarray(img.convert("RGBA")).astype(np.float32)
     visible = a[:, :, 3] > 0
-    rgb = a[:, :, :3]
-    rgb = np.minimum(rgb, HIGHLIGHT_CEIL)
+    rgb = np.minimum(a[:, :, :3], HIGHLIGHT_CEIL)
     luma = rgb[:, :, 0] * 0.299 + rgb[:, :, 1] * 0.587 + rgb[:, :, 2] * 0.114
     lift = visible & (luma < SHADOW_FLOOR)
     if lift.any():
-        scale = np.where(luma > 1e-3, SHADOW_FLOOR / np.maximum(luma, 1e-3), 1.0)
+        target = SHADOW_FLOOR + 1
+        scale = np.where(luma > 1e-3, target / np.maximum(luma, 1e-3), 1.0)
         rgb[lift] = np.clip(rgb[lift] * scale[lift][:, None], 0, HIGHLIGHT_CEIL)
+        black = lift & (luma <= 1e-3)
+        if black.any():
+            rgb[black] = target
     a[:, :, :3] = rgb
     return Image.fromarray(a.astype(np.uint8), "RGBA")
 
@@ -540,8 +549,9 @@ def build_one(name: str) -> tuple[dict, list[str]]:
     a = np.asarray(built.convert("RGBA"))
     visible = a[:, :, 3] > 0
     row["colours"] = int(len(np.unique(a[:, :, :3][visible].reshape(-1, 3), axis=0))) if visible.any() else 0
-    row["min"] = int(a[:, :, :3][visible].min()) if visible.any() else 0
-    row["max"] = int(a[:, :, :3][visible].max()) if visible.any() else 0
+    luma = a[:, :, 0] * 0.299 + a[:, :, 1] * 0.587 + a[:, :, 2] * 0.114
+    row["min"] = int(luma[visible].min()) if visible.any() else 0   # §4 shadow floor
+    row["max"] = int(a[:, :, :3][visible].max()) if visible.any() else 0  # §4 highlight ceiling
 
     # Two different things, kept apart on purpose:
     #   HEIGHT is the acceptance number. It is what the locked camera maths fixes, and a
@@ -682,7 +692,7 @@ def write_report(rows: list[dict], problems: list[str], tile_rows: list[dict] | 
         lines.append(
             f"{r['name']}: raw {r['raw']} -> ink {r['raw_ink']} -> built {r['w']}x{r['h']} px "
             f"(scale {r['scale']:.3f}, ink {r['ink_frac'] * 100:.0f}% of the box, "
-            f"value range {r['min']}-{r['max']}, clipped={r['clipped']})"
+            f"darkest luma {r['min']} / brightest channel {r['max']}, clipped={r['clipped']})"
         )
         lines.append(
             f"    implies {dw:.2f} x {dh:.2f} m in the world, against a {bw:.2f} x {bh:.2f} m box"
@@ -693,4 +703,165 @@ def write_report(rows: list[dict], problems: list[str], tile_rows: list[dict] | 
         lines += [
             "",
             "GROUND TILES (procedural — style_spec §6.1)",
-          
+            "-" * 72,
+            f"  {tiles.SIZE}x{tiles.SIZE} texels = {tiles.TILE_M:.0f}x{tiles.TILE_M:.0f} m  ->  "
+            f"{tiles.SIZE / tiles.TILE_M:.0f} texels per metre, shown at "
+            f"{85.0 / (tiles.SIZE / tiles.TILE_M):.2f}x on screen  (option (a), see tiles.py)",
+            "  room_builder.gd: uv1_scale = repeats per metre = 3.5 for a 7 x 7 m room",
+            "",
+            f"{'tile':14s} {'size':>9s} {'seam':>6s} {'inner':>6s} {'colours':>7s} "
+            f"{'value':>9s} {'sha256':>16s}",
+        ]
+        for r in tile_rows:
+            lines.append(f"{r['name']:14s} {r['size']:>9s} {r['seam']:6.2f} {r['inner']:6.2f} "
+                         f"{r['colours']:7d} {str(r['min']) + '-' + str(r['max']):>9s} "
+                         f"{r['sha256']:>16s}")
+        lines += ["", "  MODEL EVIDENCE (tools/art_raw, cached, NOT shipped):",
+                  f"  {'tile':12s} {'seam':>6s} {'inner':>6s} {'swap':>6s} {'colours':>7s}"]
+        for r in tiles.model_evidence():
+            lines.append(f"  {r['name']:12s} {r['seam']:6.2f} {r['inner']:6.2f} "
+                         f"{r['swap_seam']:6.2f} {r['colours']:7d}")
+    lines += [
+        "",
+        f"Gate (HEIGHT, the acceptance table): deviation <= {TOLERANCE:.0%}, residue 0, "
+        f"colours <= {COLOURS}, ink > 0, raw silhouette inside the frame.",
+        "  The height is what the locked camera maths fixes (world_m * "
+        f"{VPPM:.2f}), and a drawing too wide to reach it FAILS the build.",
+        f"Gate (WIDTH): reported, not gated -- a drawing narrower than its box still lands at",
+        "  exactly the authorised height, but leaves a horizontal gap in its collision box.",
+        "Gate (tiles): seam <= 2.0 and interior variation >= 1.0; measured at native size.",
+        "RESULT: " + ("PASS" if not problems else f"{len(problems)} PROBLEM(S)")
+        + (f", {len(warnings)} width warning(s)" if warnings else ""),
+    ]
+    if warnings:
+        lines += ["", "Width warnings"] + [f"  - {w}" for w in warnings]
+    if problems:
+        lines += [""] + [f"  - {p}" for p in problems]
+    REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"\nreport  {REPORT}")
+
+
+def build_batch1(check_only: bool = False, only: list[str] | None = None) -> int:
+    """Props + decor + procedural tiles, one table and one report."""
+    tiles = _load_tiles()
+    rows, problems = build_props(check_only=check_only, only=only)
+    print_table(rows)
+    tile_rows, tile_problems = tiles.build_all(check_only=check_only)
+    if not check_only:
+        for r in tile_rows:
+            write_import(r["dest"])
+    problems += tile_problems
+    warnings = [w for r in rows for w in r.get("warn", [])]
+    if warnings:
+        print("\nWARNINGS (measured, not hidden: the sprite is narrower than its box)")
+        for w in warnings:
+            print(f"  - {w}")
+    if problems:
+        print("\nPROBLEMS (fix these; do not paper over them):")
+        for p in problems:
+            print(f"  - {p}")
+    write_report(rows, problems, tile_rows, warnings)
+    return 1 if problems else 0
+
+
+def _load_tiles():
+    spec = importlib.util.spec_from_file_location("tiles", Path(__file__).with_name("tiles.py"))
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def verify_shipped(only: list[str] | None = None) -> int:
+    """Re-measure the files in assets/ — the acceptance numbers, taken off disk.
+
+    Deliberately separate from `--check`: that one measures the raws on their way through the
+    pipeline, this one opens the shipped PNGs and its sidecars and re-derives every gate. If
+    the two ever disagree, the written asset is not the asset that was measured.
+    """
+    problems: list[str] = []
+    print(f"\nVERIFY (reading assets/, not raws)   tolerance +-{TOLERANCE:.0%}")
+    print(f"{'asset':14s} {'auth':>9s} {'on disk':>9s} {'devW':>7s} {'devH':>7s} "
+          f"{'colours':>7s} {'residue':>7s} {'ink':>9s} {'range':>9s}  sidecar")
+    for name, spec in SPECS.items():
+        if only and name not in only:
+            continue
+        dest = OUT / spec["group"] / f"{name}.png"
+        aw, ah = authored(name)
+        if not dest.is_file():
+            problems.append(f"{name}: missing {dest}")
+            continue
+        img = Image.open(dest).convert("RGBA")
+        sidecar = dest.with_name(dest.name + ".import")
+        a = np.asarray(img)
+        visible = a[:, :, 3] > 0
+        exact, pink = residue(img)
+        colours = int(len(np.unique(a[:, :, :3][visible].reshape(-1, 3), axis=0))) if visible.any() else 0
+        # §4 tokens are about VALUE, not about a single channel: the shadow floor is the
+        # darkest luma in the room and the highlight ceiling is the brightest channel.
+        luma = (a[:, :, 0] * 0.299 + a[:, :, 1] * 0.587 + a[:, :, 2] * 0.114)
+        lo = int(luma[visible].min()) if visible.any() else 0
+        hi = int(a[:, :, :3][visible].max()) if visible.any() else 0
+        dev_w = (img.width - aw) / aw
+        dev_h = (img.height - ah) / ah
+        ok = "ok" if sidecar.is_file() else "MISSING"
+        print(f"{name:14s} {aw:4d}x{ah:<4d} {img.width:4d}x{img.height:<4d} "
+              f"{dev_w * 100:+6.1f}% {dev_h * 100:+6.1f}% {colours:7d} {exact + pink:7d} "
+              f"{int(visible.sum()):9d} {str(lo) + '-' + str(hi):>9s}  {ok}")
+        if exact or pink:
+            problems.append(f"{name}: magenta residue on disk exact={exact} pink={pink}")
+        if not visible.any():
+            problems.append(f"{name}: empty frame on disk")
+        if colours > COLOURS:
+            problems.append(f"{name}: {colours} colours on disk > {COLOURS}")
+        if hi > HIGHLIGHT_CEIL or lo < SHADOW_FLOOR:
+            problems.append(f"{name}: darkest luma {lo} / brightest channel {hi} leaves the "
+                            f"§4 tokens (floor {SHADOW_FLOOR}, ceiling {HIGHLIGHT_CEIL})")
+        if abs(dev_h) > TOLERANCE:
+            problems.append(f"{name}: height deviation on disk {dev_h * 100:+.1f}%")
+        if not sidecar.is_file():
+            problems.append(f"{name}: missing .import sidecar")
+
+    tiles = _load_tiles()
+    print(f"\n{'tile':14s} {'size':>9s} {'seam':>6s} {'inner':>6s} {'colours':>7s} "
+          f"{'mode':>6s}  sidecar")
+    for name in tiles.TILES:
+        dest = OUT / "tiles" / f"{name}.png"
+        if not dest.is_file():
+            problems.append(f"tile {name}: missing {dest}")
+            continue
+        img = Image.open(dest)
+        seam, inner, ratio = tiles.contact.seam_parts(img.convert("RGB"))
+        colours = int(len(np.unique(np.asarray(img.convert("RGB")).reshape(-1, 3), axis=0)))
+        sidecar = dest.with_name(dest.name + ".import")
+        print(f"{name:14s} {img.width:4d}x{img.height:<4d} {ratio:6.2f} {inner:6.2f} "
+              f"{colours:7d} {img.mode:>6s}  {'ok' if sidecar.is_file() else 'MISSING'}")
+        if (img.width, img.height) != (tiles.SIZE, tiles.SIZE):
+            problems.append(f"tile {name}: {img.size} != {tiles.SIZE}")
+        if ratio > 2.0 or inner < 1.0:
+            problems.append(f"tile {name}: seam {ratio:.2f} / inner {inner:.2f} out of gate")
+        if img.mode != "RGB":
+            problems.append(f"tile {name}: mode {img.mode}, ground tiles must be opaque")
+        if not sidecar.is_file():
+            problems.append(f"tile {name}: missing .import sidecar")
+
+    print("\nVERIFY " + ("PASS" if not problems else f"{len(problems)} PROBLEM(S)"))
+    for p in problems:
+        print(f"  - {p}")
+    return 1 if problems else 0
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--check", action="store_true", help="measure and report, write nothing")
+    ap.add_argument("--verify", action="store_true",
+                    help="re-measure the shipped files in assets/ (independent of the build)")
+    ap.add_argument("--only", nargs="*", default=None, help="subset of asset names")
+    args = ap.parse_args(argv)
+    if args.verify:
+        return verify_shipped(only=args.only)
+    return build_batch1(check_only=args.check, only=args.only)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

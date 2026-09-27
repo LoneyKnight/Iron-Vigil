@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dog87a4uqj4q"
-path="res://.godot/imported/wall_stone.png-eca4b7880eebc6f9e6dfd2864b456795.ctex"
+uid="uid://cpfpfe4iww4jj"
+path="res://.godot/imported/slice_throw.png-aeff05a9b13c73041148d5d2da3e0ddf.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tiles/wall_stone.png"
-dest_files=["res://.godot/imported/wall_stone.png-eca4b7880eebc6f9e6dfd2864b456795.ctex"]
+source_file="res://tests/shots/slice_throw.png"
+dest_files=["res://.godot/imported/slice_throw.png-aeff05a9b13c73041148d5d2da3e0ddf.ctex"]
 
 [params]
 
@@ -37,4 +37,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1

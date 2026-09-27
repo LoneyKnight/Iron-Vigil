@@ -182,7 +182,7 @@ func _footsteps(delta: float) -> void:
 	_step_t = period * clampf(SPEED / maxf(velocity.length(), 0.1), 0.6, 1.6)
 	var clip := "foot_run" if running else "foot_" + surface
 	var threat := NOISE_RUN if running else NOISE_STEP
-	Sound.play(clip, global_position, threat, randf_range(0.94, 1.06))
+	Sound.play(clip, global_position, threat, randf_range(0.94, 1.06), 0.0, self)
 
 
 func swing() -> bool:
@@ -209,7 +209,7 @@ func throw_stone() -> bool:
 		return false
 	stones -= 1
 	threw.emit(global_position + Vector3(0, 1.1, 0), facing)
-	Sound.play("stone_throw", global_position, 0.0)
+	Sound.play("stone_throw", global_position, 0.0, 1.0, 0.0, self)
 	return true
 
 
@@ -225,10 +225,10 @@ func take_damage(amount: int) -> void:
 	if not alive:
 		return
 	hp = maxi(0, hp - amount)
-	Sound.play("player_hurt", global_position, NOISE_HURT)
+	Sound.play("player_hurt", global_position, NOISE_HURT, 1.0, 0.0, self)
 	if hp == 0:
 		alive = false
-		Sound.play("enemy_die", global_position, 10.0)
+		Sound.play("enemy_die", global_position, 10.0, 1.0, 0.0, self)
 		died.emit()
 
 

@@ -7,22 +7,35 @@ extends Node3D
 
 const Util := preload("res://scripts/game/prop_util.gd")
 
+## World height of the art. 1.1 m: waist height on a 1.8 m figure, which is what an altar is.
+const ALTAR_H := 1.1
+
 var done := false
 
 var _glow: OmniLight3D
+var _lit_sprite: Sprite3D
 
 
 func build(at: Vector3) -> void:
 	add_to_group("interactive")
 	position = at
-	var stone := Util.mat(Util.STONE, 0.95)
-	Util.box(self, Vector3(2.0, 0.95, 1.0), Vector3(0, 0.48, 0), stone)
-	Util.box(self, Vector3(2.3, 0.16, 1.25), Vector3(0, 1.02, 0), Util.mat(Util.STONE_DARK, 0.95))
-	# A blood channel cut into the top: the one detail that makes it an altar and not a table.
-	Util.box(self, Vector3(1.5, 0.06, 0.16), Vector3(0, 1.11, 0), Util.mat(Util.OXBLOOD, 0.7))
-	for i in 5:
-		Util.box(self, Vector3(0.1, 0.34, 0.1),
-			Vector3(-0.8 + float(i) * 0.4, 1.27, -0.36), Util.mat(Color("d8cfae"), 0.9))
+
+	# Art first, boxes as the fallback.
+	var art := Util.sprite(self, "res://assets/props/altar.png", Vector3.ZERO, ALTAR_H)
+	if art == null:
+		var stone := Util.mat(Util.STONE, 0.95)
+		Util.box(self, Vector3(2.0, 0.95, 1.0), Vector3(0, 0.48, 0), stone)
+		Util.box(self, Vector3(2.3, 0.16, 1.25), Vector3(0, 1.02, 0), Util.mat(Util.STONE_DARK, 0.95))
+		# A blood channel cut into the top: the one detail that makes it an altar and not a table.
+		Util.box(self, Vector3(1.5, 0.06, 0.16), Vector3(0, 1.11, 0), Util.mat(Util.OXBLOOD, 0.7))
+		for i in 5:
+			Util.box(self, Vector3(0.1, 0.34, 0.1),
+				Vector3(-0.8 + float(i) * 0.4, 1.27, -0.36), Util.mat(Color("d8cfae"), 0.9))
+	Util.contact_shadow(self, Vector3.ZERO, 1.2, 0.45)
+	# A lit variant, if one has been drawn, swapped in when the rite completes.
+	_lit_sprite = Util.sprite(self, "res://assets/props/altar_lit.png", Vector3.ZERO, ALTAR_H)
+	if _lit_sprite:
+		_lit_sprite.visible = false
 	_glow = Util.glow(self, Vector3(0, 1.7, 0), 0.0, 7.0)
 	Util.sensor(self, 2.6)
 
@@ -43,7 +56,9 @@ func interact(run) -> void:
 	done = true
 	# The run's resolution, and it should be audible from anywhere in the building: the rite
 	# completing is the loudest and longest sound in the game, and it ends everything.
-	Sound.play("altar_lit", global_position, 14.0)
+	Sound.play("altar_lit", global_position, 14.0, 1.0, 0.0, run.knight)
 	run.finish_rite(self)
 	var tw := create_tween()
 	tw.tween_property(_glow, "light_energy", 3.2, 0.7)
+	if _lit_sprite:
+		_lit_sprite.visible = true

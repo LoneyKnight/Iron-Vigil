@@ -16,7 +16,7 @@ extends Node
 ##   * a sound behind a wall goes through a low-pass bus, so "through the wall" is audibly
 ##     different from "in the room" without needing to see anything.
 
-signal noise_made(at: Vector3, threat: float, kind: String)
+signal noise_made(at: Vector3, threat: float, kind: String, source: Node)
 
 const SFX_DIR := "res://assets/sfx/"
 const MUFFLED_BUS := "SFX_Muffled"
@@ -44,8 +44,12 @@ func set_listener(node: Node3D) -> void:
 ##
 ## `threat` is the design knob: 0 = silent, 1 = a footstep, 14 = a door shouldered open. It
 ## controls both how loud it plays and how far it carries, so the two can never disagree.
+##
+## `source` is who caused it, and it exists so listeners can decide whether they care. A
+## cultist's chant is a noise in the world that the player must hear; it is not a noise that
+## should alert other cultists. Passing `self` is how a caller says "this was me".
 func play(kind: String, at: Vector3, threat: float = 1.0,
-		pitch: float = 1.0, volume_db: float = 0.0) -> void:
+		pitch: float = 1.0, volume_db: float = 0.0, source: Node = null) -> void:
 	var stream := _stream(kind)
 	if stream == null:
 		return
@@ -60,7 +64,7 @@ func play(kind: String, at: Vector3, threat: float = 1.0,
 	p.volume_db = clampf(volume_db + quiet, -40.0, 6.0)
 	p.play()
 	if threat > 0.0:
-		noise_made.emit(at, threat, kind)
+		noise_made.emit(at, threat, kind, source)
 
 
 ## Sounds that are not in the world: the player's own heartbeat, UI feedback. Deliberately a

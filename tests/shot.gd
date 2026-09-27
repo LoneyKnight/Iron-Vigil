@@ -22,6 +22,8 @@ const TIMEOUT_SEC := 120.0
 const DoorScript := preload("res://scripts/game/door.gd")
 const ChestScript := preload("res://scripts/game/chest.gd")
 const AltarScript := preload("res://scripts/game/altar.gd")
+const Knight := preload("res://scripts/game/knight.gd")
+const Cultist := preload("res://scripts/game/cultist.gd")
 
 var run: Node3D
 var failures: Array[String] = []
@@ -275,17 +277,45 @@ func _go() -> void:
 		await _frames(4)
 		var home: Vector3 = target_cultist.global_position
 
-		# A quiet noise nearby does NOT pull it: a footstep is not an alarm.
-		Sound.noise_made.emit(home + Vector3(1.2, 0, 0), 1.5, "foot_stone")
+		# Reset the subject before measuring. Everything above this line has already made
+		# noises — doors, chests, the relic chime — so a cultist arriving here is usually
+		# mid-investigation. Asserting "this noise does not wake it" against an already-awake
+		# cultist passes for the wrong reason: a false green, which is worse than a failure.
+		target_cultist.state = 0
+		await _frames(2)
+
+		# Earshot in this build is threat * 1.7 m, so a footstep (threat 1.5) carries 2.55 m.
+		# A walking knight is therefore audible in the same room and the next one, which is the
+		# intended shape: the player cannot creep, only choose not to run.
+		#
+		# The distance is 2.0 m, not 1.2 m: a cultist that is already within
+		# INVESTIGATE_ARRIVE of the noise treats it as reached and goes straight back to
+		# wandering, so a noise dropped on top of it is heard and then instantly forgotten.
+		# That is correct behaviour and it made the first version of this test look broken.
+		var earshot_step: float = float(Knight.NOISE_STEP) * float(run.HEAR_PER_THREAT)
+		Sound.noise_made.emit(home + Vector3(2.0, 0, 0), float(Knight.NOISE_STEP),
+			"foot_stone", run.knight)
+		await _frames(2)
+		_check(int(target_cultist.state) == 1,
+			"a footstep 2.0 m away is heard (earshot %.1f m), state=%d"
+			% [earshot_step, target_cultist.state])
+
+		# The other half, and the one that actually constrains the design: the SAME noise just
+		# past the range must be inaudible. Without this, an infinite hearing radius would pass
+		# every assertion above.
+		target_cultist.state = 0
+		await _frames(2)
+		Sound.noise_made.emit(home + Vector3(earshot_step + 2.0, 0, 0),
+			float(Knight.NOISE_STEP), "foot_stone", run.knight)
 		await _frames(2)
 		_check(int(target_cultist.state) == 0,
-			"a footstep 1.2 m away does not wake a wandering cultist (state=%d)"
-			% target_cultist.state)
+			"the same footstep %.1f m away is NOT heard (earshot %.1f m), state=%d"
+			% [earshot_step + 2.0, earshot_step, target_cultist.state])
 
 		# A loud noise far away DOES pull it, and toward the noise rather than toward the
 		# player: that distinction is the entire point of the system.
 		var far := home + Vector3(9.0, 0, 0)
-		Sound.noise_made.emit(far, 12.0, "door_slam")
+		Sound.noise_made.emit(far, 12.0, "door_slam", run.knight)
 		await _frames(2)
 		_check(int(target_cultist.state) != 0,
 			"a door slam 9 m away pulls the cultist (state=%d)" % target_cultist.state)
@@ -297,13 +327,15 @@ func _go() -> void:
 			_check(after < before - 0.3,
 				"the cultist walks toward the noise (%.1f m -> %.1f m)" % [before, after])
 
-		# Earshot scales with the noise. A whisper on the far side of the building must not
-		# summon anything, or loudness stops meaning anything.
+		# An enemy's own noise must not alert it or its fellows: one idle chant cascading
+		# through the building would drown out the player's own noise, which is the thing the
+		# whole system exists to make meaningful.
 		target_cultist.state = 0
-		Sound.noise_made.emit(home + Vector3(60.0, 0, 0), 1.5, "foot_stone")
+		await _frames(2)
+		Sound.noise_made.emit(home, 12.0, "cultist_chant", target_cultist)
 		await _frames(2)
 		_check(int(target_cultist.state) == 0,
-			"a quiet noise 60 m away is not heard (state=%d)" % target_cultist.state)
+			"a cultist's own chant does not wake it (state=%d)" % target_cultist.state)
 		# Put the player back where the rest of the test expects him.
 		run.knight.position = run.house.rooms[run.house.entrance].centre()
 		await _frames(4)

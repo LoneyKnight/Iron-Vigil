@@ -19,7 +19,9 @@ var opened := false
 ## can actually hear. Defaults to a normal push.
 var push_force := 0.45
 
-var _panel: MeshInstance3D
+## Either a Sprite3D (when there is art) or a MeshInstance3D (the fallback), so the field is
+## typed as the common base. `_slide` only touches `.position`, which both have.
+var _panel: Node3D
 var _body: StaticBody3D
 
 
@@ -33,12 +35,21 @@ func build(room_cell: Vector2i, p_dir: int, world_pos: Vector3) -> void:
 	var size := (Vector3(WIDTH, HEIGHT, 0.3) if horizontal
 		else Vector3(0.3, HEIGHT, WIDTH))
 
-	_panel = Util.box(self, size, Vector3(0, HEIGHT * 0.5, 0), Util.mat(Util.OAK, 0.85))
-	var band := Util.mat(Util.IRON, 0.55)
-	for y in [0.6, 1.7]:
-		var band_size := (Vector3(WIDTH * 1.02, 0.12, 0.34) if horizontal
-			else Vector3(0.34, 0.12, WIDTH * 1.02))
-		Util.box(self, band_size, Vector3(0, y, 0), band)
+	# Art first, boxes as the fallback. The door is WIDTH-locked, not height-locked: its drawing
+	# is 1.60 x 2.28 m while the opening is 1.60 x 2.60 m, so scaling by height would push it
+	# 11 cm into the wall on each side and the doorway would look walled-up. A 2.29 m door in a
+	# 2.6 m opening is just a door with a frame above it, and the lintel already covers that.
+	# The collider is the full opening either way: hit detection must not depend on the drawing.
+	_panel = Util.sprite(self, "res://assets/props/door_closed.png",
+		Vector3.ZERO, HEIGHT, WIDTH)
+	if _panel == null:
+		_panel = Util.box(self, size, Vector3(0, HEIGHT * 0.5, 0), Util.mat(Util.OAK, 0.85))
+		var band := Util.mat(Util.IRON, 0.55)
+		for y in [0.6, 1.7]:
+			var band_size := (Vector3(WIDTH * 1.02, 0.12, 0.34) if horizontal
+				else Vector3(0.34, 0.12, WIDTH * 1.02))
+			Util.box(self, band_size, Vector3(0, y, 0), band)
+	Util.contact_shadow(self, Vector3.ZERO, WIDTH * 0.6, 0.35)
 	_body = Util.blocker(self, size, Vector3(0, HEIGHT * 0.5, 0))
 	Util.sensor(self, 2.2)
 
@@ -47,7 +58,7 @@ func prompt() -> String:
 	return "" if opened else "开门"
 
 
-func interact(_run) -> void:
+func interact(run) -> void:
 	if opened:
 		return
 	opened = true
@@ -56,7 +67,7 @@ func interact(_run) -> void:
 	# the game, because it is the one the player chooses to make or not make.
 	var clip := "door_open_hard" if push_force > 0.6 else "door_open_soft"
 	var threat := lerpf(2.5, 11.0, clampf(push_force, 0.0, 1.0))
-	Sound.play(clip, global_position, threat, randf_range(0.95, 1.05))
+	Sound.play(clip, global_position, threat, randf_range(0.95, 1.05), 0.0, run.knight)
 	# Slide the panel into the floor and drop the collider. No animation art needed: the door
 	# visibly going away is the whole message.
 	var tw := create_tween()
