@@ -10,7 +10,7 @@ config_version=5
 
 config/name="Iron Vigil"
 config/version="0.0.1"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -22,6 +22,14 @@ window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[physics]
+
+; Godot 4.6+ ships two 3D engines and the default changed; Jolt is the maintained one and
+; is what the previous project shipped on. Pinned here so a version bump cannot silently
+; move the whole game onto a different solver — character-body behaviour differs between
+; them, and "my collider stopped working" is not a bug worth rediscovering.
+3d/physics_engine="Jolt Physics"
 
 [rendering]
 
